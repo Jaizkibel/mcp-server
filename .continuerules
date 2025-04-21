@@ -1,0 +1,12 @@
+This is a Python project that uses the FastMCP framework to create a MCP server for usage with AI models.
+
+It uses Python 3.12 and uv as package manager.
+
+My Python knowledge is limited, you may give me some explanations and hints.
+
+I use VS Code as my IDE.
+The operating system is Linux.
+
+If you are capable of tool use, use them whenever it makes sense.
+
+If you do not find the matching tool to fullfill a task, you may use the terminal.
