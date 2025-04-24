@@ -164,7 +164,7 @@ async def ls_workspace() -> str:
 @mcp.tool()
 async def execute_sql_query(query: str) -> str:
     """Executes a read-only SQL query on a PostgreSQL database and returns the result as JSON.
-    It connects using a read-only user.^
+    It connects using a read-only user.
     This tool assumes the query is read-only (e.g., SELECT). It should not be used for data modification (INSERT, UPDATE, DELETE).
 
     Args:
