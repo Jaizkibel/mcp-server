@@ -435,12 +435,13 @@ async def run_tests(tool_name: str, test_pattern: str):
         if not test_pattern:
             test_pattern = "*"
         if tool_name == "mvn":
-            # Maven command
-            test_command = [tool_name, "test", f"-Dtest={test_pattern}"]
+            # Maven command (with "quit" option)
+            test_command = [tool_name, "test", "-q", f"-Dtest={test_pattern}"]
         else:
-            # Gradle command (force execution)
+            # Gradle command
             test_command = [tool_name, "test", "--tests", test_pattern]
 
+        logger.debug(f"Running test command: {' '.join(test_command)} in {workspace_path}")
         # Execute the command in the workspace directory
         result = subprocess.run(
             test_command,
@@ -454,8 +455,9 @@ async def run_tests(tool_name: str, test_pattern: str):
             logger.info(f"Tests executed successfully: {result.stdout}")
             return result.stdout
         else:
-            logger.error(f"Tests failed: {result.stderr}")
-            return f"Error: {result.stderr}"
+            errmsg = result.stdout + "\n" + result.stderr
+            logger.error(f"Tests failed: {errmsg}")
+            return f"Error: {errmsg}"
     except Exception as e:
         logger.error(f"Error running tests: {e}", exc_info=True)
         return f"Error: {str(e)}"
