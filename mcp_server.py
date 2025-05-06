@@ -409,7 +409,7 @@ async def run_gradle_tests(test_pattern: str) -> str:
     Returns:
         str: The output of the Gradle test execution.
     """
-    return await run_tests("gradlew", test_pattern)
+    return await run_goal("gradlew", "test", test_pattern)
 
 
 @mcp.tool()
@@ -422,29 +422,42 @@ async def run_maven_tests(test_pattern: str) -> str:
     Returns:
         str: The output of the Maven test execution.
     """
-    return await run_tests("mvn", test_pattern)
+    return await run_goal("mvn", "test", test_pattern)
+
+@mcp.tool()
+async def get_effective_pom() -> str:
+    """Generates the effective POM.
+
+    Returns:
+        str: the effective POM
+    """
+    return await run_goal("mvn", "help:effective-pom")
 
 
-async def run_tests(tool_name: str, test_pattern: str):
+async def run_goal(tool_name: str, goal_name, test_pattern: str):
     workspace_path = config.get("projectFolder")
     if not workspace_path:
         logger.error("Workspace path is not set in the configuration.")
         return "Error: Workspace path is not set in the configuration."
 
     try:
-        if not test_pattern:
-            test_pattern = "*"
-        if tool_name == "mvn":
-            # Maven command (with "quit" option)
-            test_command = [tool_name, "test", "-q", f"-Dtest={test_pattern}"]
+        if goal_name == "test":
+            if not test_pattern:
+                test_pattern = "*"
+            if tool_name == "mvn":
+                # Maven command (with "quit" option)
+                command = [tool_name, goal_name, "-q", f"-Dtest={test_pattern}"]
+            else:
+                # Gradle command
+                command = [tool_name, goal_name, "--tests", test_pattern]
         else:
-            # Gradle command
-            test_command = [tool_name, "test", "--tests", test_pattern]
+            command = [tool_name, goal_name]
 
-        logger.debug(f"Running test command: {' '.join(test_command)} in {workspace_path}")
+
+        logger.debug(f"Running test command: \"{' '.join(command)} in {workspace_path}")
         # Execute the command in the workspace directory
         result = subprocess.run(
-            test_command,
+            command,
             cwd=workspace_path,
             text=True,
             capture_output=True,
