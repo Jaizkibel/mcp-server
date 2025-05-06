@@ -55,11 +55,11 @@ mcp = FastMCP("test")
 logger.info("MCP server initialized")
 
 
-@mcp.tool()
-async def get_local_time() -> str:
-    """Gets the current local time."""
-    logger.info("get_local_time called")
-    return str(datetime.datetime.now())
+# @mcp.tool()
+# async def get_local_time() -> str:
+#     """Gets the current local time."""
+#     logger.info("get_local_time called")
+#     return str(datetime.datetime.now())
 
 
 @mcp.tool()
