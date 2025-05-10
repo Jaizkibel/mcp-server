@@ -1,5 +1,8 @@
 # Global HTTP client with connection pooling
 from contextlib import asynccontextmanager
+import datetime
+from decimal import Decimal
+import json
 import logging
 from bs4 import BeautifulSoup
 import httpx
@@ -7,6 +10,16 @@ import httpx
 logger = logging.getLogger(__name__)
 
 _http_client = None
+
+# Custom JSON encoder to handle Decimal and datetime objects
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        elif isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        return super().default(obj)
+
             
 async def get_http_client() -> httpx.AsyncClient:
     """Get or create a shared AsyncClient instance with connection pooling."""

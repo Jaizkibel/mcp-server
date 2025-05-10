@@ -1,9 +1,7 @@
-import datetime
 import os
 import platform  # Add platform module import
 from typing import Any
 import json
-from decimal import Decimal
 from mcp.server.fastmcp import FastMCP
 import logging
 import asyncio
@@ -14,6 +12,7 @@ import subprocess
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
 from utils.web import (
+    CustomJSONEncoder,
     close_http_client,
     http_client_context,
     strip_strong_tags,
@@ -38,16 +37,6 @@ logger = logging.getLogger(__name__)
 
 configPath = f"{Path.home()}/.mcp-server/config.yml"
 config = {}
-
-
-# Custom JSON encoder to handle Decimal and datetime objects
-class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return float(obj)
-        elif isinstance(obj, (datetime.datetime, datetime.date)):
-            return obj.isoformat()
-        return super().default(obj)
 
 
 # init MCP server

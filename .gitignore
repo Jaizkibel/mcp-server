@@ -19,3 +19,4 @@ mcp_server.log
 .continuerc.json
 brave-api.http
 .roo/mcp.json
+mcp_server_low.log
