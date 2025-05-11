@@ -8,19 +8,16 @@ logger = logging.getLogger(__name__)
 _db_pool = None
 
 
-async def get_db_pool(config) -> asyncpg.pool.Pool:
+async def get_db_pool(dbname: str, config: dict) -> asyncpg.pool.Pool:
     """Get or create a shared database connection pool."""
     global _db_pool
     if _db_pool is None:
-        dbName = config["dbName"]
-        if dbName is None:
-            raise ValueError("Database name not specified in configuration")
         _db_pool = await asyncpg.create_pool(
-            user=config["database"][dbName]["username"],
-            password=config["database"][dbName]["password"],
-            database=config["database"][dbName]["dbname"],
-            host=config["database"][dbName]["host"],
-            port=config["database"][dbName]["port"],
+            user=config["database"][dbname]["username"],
+            password=config["database"][dbname]["password"],
+            database=config["database"][dbname]["dbname"],
+            host=config["database"][dbname]["host"],
+            port=config["database"][dbname]["port"],
             min_size=config["database"]["min_size"],
             max_size=config["database"]["max_size"],
             max_queries=config["database"]["max_queries"],
@@ -29,10 +26,10 @@ async def get_db_pool(config) -> asyncpg.pool.Pool:
     return _db_pool
 
 @asynccontextmanager
-async def db_connection_context(config):
+async def db_connection_context(dbname: str, config: dict):
     """Context manager for database operations using connection pool."""
     try:
-        pool = await get_db_pool(config=config)
+        pool = await get_db_pool(dbname, config)
         conn = None
         conn = await pool.acquire()
         yield conn

@@ -7,4 +7,4 @@ My Python knowledge is limited, so you can add some hints or explanations to you
 Instructions for all tasks:
 
 * Use the offered tools whenever it makes sense to retrieve additional informations about the project or to change or create code.
-* If you need current information, use the `query_web` tool to search the Internet.
+* If you need current information, use the `web_search` tool to search the Internet.

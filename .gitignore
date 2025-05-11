@@ -11,7 +11,7 @@ wheels/
 
 .vscode/
 
-mcp_server.log
+*.log
 **/.DS_Store
 
 .git/
@@ -19,4 +19,3 @@ mcp_server.log
 .continuerc.json
 brave-api.http
 .roo/mcp.json
-mcp_server_low.log

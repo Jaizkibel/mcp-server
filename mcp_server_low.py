@@ -14,9 +14,11 @@ import logging
 import yaml
 
 from utils.args import parse_arguments
+from utils.db import close_db_pool, db_connection_context
 from utils.mcp import get_project_folder, to_text_context
 from utils.web import (
     CustomJSONEncoder,
+    close_http_client,
     http_client_context,
     strip_strong_tags,
     strip_text_from_html,
@@ -39,7 +41,10 @@ config = {}
 async def server_lifespan(server: Server) -> AsyncIterator[dict]:
     """Manage server startup and shutdown lifecycle."""
     # Minimal implementation that yields empty dict
-    yield {}
+    try:
+        yield {}
+    finally:
+        asyncio.run(cleanup())
 
 
 # Pass lifespan to server
@@ -58,12 +63,6 @@ async def list_tools() -> list[types.Tool]:
     """Lists all available tools."""
     return [
         types.Tool(
-            name="get_os_info",
-            description="Get information about the local operating system. Rturns a JSON string containing detailed OS information.",
-            inputSchema={"type": "object", "required": []},
-            annotations={"readOnlyHint": True},
-        ),
-        types.Tool(
             name="web_search",
             description="Search the web for information using the Brave search API. Returns a JSON string containing the URLs, descriptions, and fetched content of the top 3 results.",
             inputSchema={
@@ -75,6 +74,19 @@ async def list_tools() -> list[types.Tool]:
             },
             annotations={"readOnlyHint": True, "openWorldHint": True},
         ),
+        types.Tool(
+            name="execute_sql_query",
+            description="Executes a read-only SQL query on a PostgreSQL database and returns the result as JSON.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "dbname": {"type": "string", "description": "The name of the database to connect."},
+                    "query": {"type": "string", "description": "The SQL query to execute"}
+                },
+                "required": ["dbname","query"],
+            },
+            annotations={"readOnlyHint": True, "openWorldHint": False},
+        ),
     ]
 
 @server.call_tool()
@@ -84,49 +96,76 @@ async def handle_tool_call(
     """handles all tool calls!!!"""
 
     response = f"Error: Tool {name} not found"
-    if name == "get_os_info":
-        response = await get_os_info()
     if name == "web_search":
         query = arguments["query"]
         if query == None:
-            ValueError("Parmeter 'query' is missing")
+            ValueError("Parameter 'query' is missing")
         response = await web_search(query)
+    if name == "execute_sql_query":
+        dbname = arguments["dbname"]
+        if dbname == None:
+            ValueError("Parameter 'dbname' is missing")
+        query = arguments["query"]
+        if query == None:
+            ValueError("Parameter 'query' is missing")
+        response = await execute_sql_query(dbname, query)
 
     return to_text_context(response)        
 
 
-async def get_os_info() -> str:
-    """Get information about the local operating system"""
-    logger.info("get_os_info called")
+# async def get_os_info() -> str:
+#     """Get information about the local operating system"""
+#     logger.info("get_os_info called")
 
-    project_folder = await get_project_folder(server, config)
+#     project_folder = await get_project_folder(server, config)
 
-    os_info = {
-        "system": platform.system(),
-        "release": platform.release(),
-        "version": platform.version(),
-        "machine": platform.machine(),
-        "processor": platform.processor(),
-        "python_version": platform.python_version(),
-        "workspace_folder": project_folder
-    }
+#     os_info = {
+#         "system": platform.system(),
+#         "release": platform.release(),
+#         "version": platform.version(),
+#         "machine": platform.machine(),
+#         "processor": platform.processor(),
+#         "python_version": platform.python_version(),
+#         "workspace_folder": project_folder
+#     }
 
-    # Get additional info based on the platform
-    if platform.system() == "Windows":
-        os_info["edition"] = (
-            platform.win32_edition() if hasattr(platform, "win32_edition") else "N/A"
-        )
-        os_info["is_64bit"] = platform.machine().endswith("64")
-    elif platform.system() in ["Darwin", "Linux"]:
-        try:
-            uname_result = os.uname()
-            os_info["node"] = uname_result.nodename
-            os_info["kernel"] = uname_result.release
-        except AttributeError:
-            pass
+#     # Get additional info based on the platform
+#     if platform.system() == "Windows":
+#         os_info["edition"] = (
+#             platform.win32_edition() if hasattr(platform, "win32_edition") else "N/A"
+#         )
+#         os_info["is_64bit"] = platform.machine().endswith("64")
+#     elif platform.system() in ["Darwin", "Linux"]:
+#         try:
+#             uname_result = os.uname()
+#             os_info["node"] = uname_result.nodename
+#             os_info["kernel"] = uname_result.release
+#         except AttributeError:
+#             pass
 
-    logger.info(f"Collected OS info: {os_info}")
-    return json.dumps(os_info, cls=CustomJSONEncoder)
+#     logger.info(f"Collected OS info: {os_info}")
+#     return json.dumps(os_info, cls=CustomJSONEncoder)
+
+
+async def execute_sql_query(dbname: str, query: str) -> str:
+    """Executes a read-only SQL query on a PostgreSQL database and returns the result as JSON.
+    """
+    logger.info(f"Executing SQL query: {query}")
+
+    conn = None
+    try:
+        async with db_connection_context(dbname, config) as conn:
+            logger.info("Database connection established.")
+            result = await conn.fetch(query)
+            logger.info(f"Query executed successfully. Fetched {len(result)} records.")
+            result_dict = [dict(record) for record in result]
+            logger.debug(f"Result of query {query}: {result_dict}")
+            return json.dumps(result_dict, cls=CustomJSONEncoder)
+    except Exception as e:
+        logger.error(f"Error executing SQL query: {e}", exc_info=True)
+        return json.dumps({"error": str(e)})
+
+
 
 
 async def web_search(query: str) -> str:
@@ -229,6 +268,11 @@ async def run():
             ),
         )
 
+async def cleanup():
+    """Cleanup resources when the server stops."""
+    await close_db_pool()
+    await close_http_client()
+    logger.info("Cleanup completed.")
 
 if __name__ == "__main__":
     import asyncio
