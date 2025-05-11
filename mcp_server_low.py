@@ -7,8 +7,6 @@ from typing import AsyncIterator
 
 import mcp.server.stdio
 import mcp.types as types
-
-# from mcp.server import Server
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 import logging
@@ -16,7 +14,7 @@ import logging
 import yaml
 
 from utils.args import parse_arguments
-from utils.mcp import to_text_context
+from utils.mcp import get_project_folder, to_text_context
 from utils.web import (
     CustomJSONEncoder,
     http_client_context,
@@ -27,7 +25,7 @@ from utils.web import (
 # Configure logging
 logging.basicConfig(
     filename="mcp_server_low.log",
-    level=logging.NOTSET,
+    level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
@@ -83,13 +81,15 @@ async def list_tools() -> list[types.Tool]:
 async def handle_tool_call(
     name: str, arguments: dict
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
-    """handles all tool calls"""
+    """handles all tool calls!!!"""
 
     response = f"Error: Tool {name} not found"
     if name == "get_os_info":
         response = await get_os_info()
     if name == "web_search":
         query = arguments["query"]
+        if query == None:
+            ValueError("Parmeter 'query' is missing")
         response = await web_search(query)
 
     return to_text_context(response)        
@@ -99,6 +99,8 @@ async def get_os_info() -> str:
     """Get information about the local operating system"""
     logger.info("get_os_info called")
 
+    project_folder = await get_project_folder(server, config)
+
     os_info = {
         "system": platform.system(),
         "release": platform.release(),
@@ -106,6 +108,7 @@ async def get_os_info() -> str:
         "machine": platform.machine(),
         "processor": platform.processor(),
         "python_version": platform.python_version(),
+        "workspace_folder": project_folder
     }
 
     # Get additional info based on the platform
