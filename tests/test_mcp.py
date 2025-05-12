@@ -13,6 +13,8 @@ from mcp_server import (
     http_post_request,
     ls_workspace,
     run_gradle_tests,
+    get_effective_pom,  # Add import for get_effective_pom
+    run_goal,  # Add import for run_goal
     config
 )    
 import datetime
@@ -215,6 +217,97 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("BUILD SUCCESSFUL", result)
         # print(result)
+
+    @patch('mcp_server.run_goal')
+    async def test_get_effective_pom_success(self, mock_run_goal):
+        # Setup the mock to return a sample POM XML
+        sample_pom = """<project>
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>test-project</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    </project>"""
+        mock_run_goal.return_value = sample_pom
+
+        # Call the function
+        result = await get_effective_pom()
+
+        # Verify the result and assert that run_goal was called with correct arguments
+        self.assertEqual(result, sample_pom)
+        mock_run_goal.assert_called_once_with("mvn", "help:effective-pom", None)
+
+    @patch('mcp_server.run_goal')
+    async def test_get_effective_pom_error(self, mock_run_goal):
+        # Setup the mock to return an error message
+        error_message = "Error: Maven not found in path"
+        mock_run_goal.return_value = error_message
+
+        # Call the function
+        result = await get_effective_pom()
+
+        # Verify the result
+        self.assertEqual(result, error_message)
+        mock_run_goal.assert_called_once_with("mvn", "help:effective-pom", None)
+
+    @patch('mcp_server.logger')
+    @patch('mcp_server.config')
+    @patch('subprocess.run')
+    async def test_run_goal_for_effective_pom(self, mock_subprocess_run, mock_config, mock_logger):
+        # Setup mock configuration
+        mock_config.get.return_value = "/test/workspace"
+        
+        # Create a mock for subprocess.run result
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        mock_process.stdout = "<project>...</project>"
+        mock_subprocess_run.return_value = mock_process
+
+        # Call run_goal with effective POM parameters
+        result = await run_goal("mvn", "help:effective-pom", None)
+
+        # Assert subprocess was called with correct command
+        mock_subprocess_run.assert_called_once_with(
+            ["mvn", "help:effective-pom"],
+            cwd="/test/workspace",
+            text=True,
+            capture_output=True
+        )
+        
+        # Verify result
+        self.assertEqual(result, "<project>...</project>")
+        mock_logger.debug.assert_called()  # Verify logging occurred
+        
+    @patch('mcp_server.logger')
+    @patch('mcp_server.config')
+    @patch('subprocess.run')
+    async def test_run_goal_no_workspace(self, mock_subprocess_run, mock_config, mock_logger):
+        # Setup mock to return None for projectFolder
+        mock_config.get.return_value = None
+        
+        # Call run_goal
+        result = await run_goal("mvn", "help:effective-pom", None)
+        
+        # Verify error message and that subprocess was not called
+        self.assertEqual(result, "Error: Workspace path is not set in the configuration.")
+        mock_subprocess_run.assert_not_called()
+        mock_logger.error.assert_called()  # Verify error was logged
+
+    @patch('mcp_server.logger')
+    @patch('mcp_server.config')
+    @patch('subprocess.run')
+    async def test_run_goal_subprocess_error(self, mock_subprocess_run, mock_config, mock_logger):
+        # Setup mock configuration
+        mock_config.get.return_value = "/test/workspace"
+        
+        # Make subprocess.run raise an exception
+        mock_subprocess_run.side_effect = Exception("Command failed")
+        
+        # Call run_goal
+        result = await run_goal("mvn", "help:effective-pom", None)
+        
+        # Verify error message
+        self.assertEqual(result, "Error: Command failed")
+        mock_logger.error.assert_called()  # Verify error was logged
 
 if __name__ == "__main__":
     unittest.main()

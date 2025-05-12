@@ -429,9 +429,18 @@ async def get_effective_pom() -> str:
     """Generates the effective POM.
 
     Returns:
-        str: the effective POM
+        str: the effective POM as XML
     """
-    return await run_goal("mvn", "help:effective-pom")
+    run_result = await run_goal("mvn", "help:effective-pom", None)
+    
+    # Extract only the XML part starting with <?xml
+    if "<?xml" in run_result:
+        xml_start = run_result.find("<?xml")
+        if xml_start >= 0:
+            return run_result[xml_start:]
+    
+    # If no XML found, return the original output with an error message
+    return f"Error: Could not extract XML"
 
 
 async def run_goal(tool_name: str, goal_name, test_pattern: str):
@@ -445,14 +454,14 @@ async def run_goal(tool_name: str, goal_name, test_pattern: str):
             if not test_pattern:
                 test_pattern = "*"
             if tool_name == "mvn":
-                # Maven command (with "quit" option)
+                # Maven command (with "quiet" option)
                 command = [tool_name, goal_name, "-q", f"-Dtest={test_pattern}"]
             else:
                 # Gradle command
                 command = [tool_name, goal_name, "--tests", test_pattern]
         else:
+            # For other goals like help:effective-pom
             command = [tool_name, goal_name]
-
 
         logger.debug(f"Running test command: \"{' '.join(command)} in {workspace_path}")
         # Execute the command in the workspace directory
