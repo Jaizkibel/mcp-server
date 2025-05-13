@@ -11,6 +11,7 @@ import subprocess
 
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
+from utils.mcp import is_relative_path
 from utils.web import (
     CustomJSONEncoder,
     close_http_client,
@@ -451,13 +452,6 @@ async def run_tests(tool_name: str, test_pattern: str):
         logger.error(f"Error running tests: {e}", exc_info=True)
         return f"Error: {str(e)}"
 
-
-def is_relative_path(path: str) -> bool:
-    """Check if the given path is relative."""
-    if path.startswith("http"):
-        return False
-
-    return not os.path.isabs(path)
 
 
 if __name__ == "__main__":

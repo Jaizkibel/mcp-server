@@ -35,3 +35,12 @@ async def get_project_folder(server: Server, config: dict) -> str:
     except Exception as e:
         logger.error(f"Failed to list roots: {e}", exc_info=True)
         return None
+    
+def is_relative_path(path: str) -> bool:
+    """Check if the given path is relative."""
+    if path.startswith("http"):
+        return False
+
+    return not os.path.isabs(path)
+
+

@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import subprocess
 from typing import AsyncIterator
 
 import mcp.server.stdio
@@ -15,7 +16,7 @@ import yaml
 
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
-from utils.mcp import get_project_folder, to_text_context
+from utils.mcp import get_project_folder, is_relative_path, to_text_context
 from utils.web import (
     CustomJSONEncoder,
     close_http_client,
@@ -75,6 +76,18 @@ async def list_tools() -> list[types.Tool]:
             annotations={"readOnlyHint": True, "openWorldHint": True},
         ),
         types.Tool(
+            name="open_in_browser",
+            description="Opens a url or file in the local browser .Returns a success or error message.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL or file path to open."}
+                },
+                "required": ["url"],
+            },
+            annotations={"readOnlyHint": True, "openWorldHint": True},
+        ),
+        types.Tool(
             name="execute_sql_query",
             description="Executes a read-only SQL query on a PostgreSQL database and returns the result as JSON.",
             inputSchema={
@@ -114,6 +127,11 @@ async def handle_tool_call(
         if query == None:
             ValueError("Parameter 'query' is missing")
         response = await web_search(query)
+    if name == "open_in_browser":
+        url = arguments["query"]
+        if url == None:
+            ValueError("Parameter 'url' is missing")
+        response = await open_in_browser(url)
     if name == "execute_sql_query":
         dbname = arguments["dbname"]
         if dbname == None:
@@ -287,6 +305,42 @@ async def web_search(query: str) -> str:
         return json.dumps({"error": f"Unexpected server error: {str(e)}"})
 
 
+async def open_in_browser(url: str) -> str:
+    """Opens a url or file in the local browser
+    """
+    if not url.endswith(".html"):
+        return "Error: can open HTML pages only"
+    workspace_path = await get_project_folder(server, config)
+    if not workspace_path:
+        logger.error("Workspace path is not set in the configuration.")
+        return "Error: Workspace path is not set in the configuration."
+    browser_command = config.get("browserCommand")
+    if not browser_command:
+        logger.error("Browser command is not set in the configuration.")
+        return "Error: Browser command is not set in the configuration."
+
+    if is_relative_path(url):
+        url = f"{workspace_path}/{url}"
+
+    try:
+        command = [browser_command, url]
+        # Execute command to open browser
+        result = subprocess.run(
+            command,
+            text=True,
+            capture_output=True,
+        )
+
+        # Check if the command was successful
+        if result.returncode == 0:
+            logger.info(f"result of open_in_browser: {result}")
+            return "Browser successfully opened"
+        else:
+            return f"Error: {result.stderr}"
+    except Exception as e:
+        logger.error(f"Error opening url in browser: {e}", exc_info=True)
+        return f"Error: {str(e)}"
+    
 async def run():
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         await server.run(
