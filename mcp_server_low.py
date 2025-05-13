@@ -94,7 +94,7 @@ async def list_tools() -> list[types.Tool]:
                 "type": "object",
                 "properties": {
                     "url": {"type": "string", "description": "The URL to send the GET request to."},
-                    "headers": {"type": "array", "description": "List of request headers."}
+                    "headers": {"type": "object", "description": "Map of request headers."}
                 },
                 "required": ["url"],
             },
@@ -131,7 +131,8 @@ async def handle_tool_call(
     return to_text_context(response)        
 
 async def execute_sql_query(dbname: str, query: str) -> str:
-    """Executes a read-only SQL query on a PostgreSQL database and returns the result as JSON.
+    """Executes a read-only SQL query on a database and returns the result as JSON.
+    Supports both PostgreSQL and SQL Server databases.
     """
     logger.info(f"Executing SQL query: {query}")
 
@@ -139,9 +140,30 @@ async def execute_sql_query(dbname: str, query: str) -> str:
     try:
         async with db_connection_context(dbname, config) as conn:
             logger.info("Database connection established.")
-            result = await conn.fetch(query)
-            logger.info(f"Query executed successfully. Fetched {len(result)} records.")
-            result_dict = [dict(record) for record in result]
+            
+            # Determine database vendor
+            vendor = config["database"][dbname].get("vendor", "postgresql").lower()
+            
+            if vendor == "postgresql":
+                # PostgreSQL execution
+                result = await conn.fetch(query)
+                logger.info(f"Query executed successfully on PostgreSQL. Fetched {len(result)} records.")
+                result_dict = [dict(record) for record in result]
+                
+            elif vendor == "sqlserver":
+                # SQL Server execution
+                cursor = await conn.cursor()
+                await cursor.execute(query)
+                columns = [column[0] for column in cursor.description]
+                rows = await cursor.fetchall()
+                await cursor.close()
+                
+                logger.info(f"Query executed successfully on SQL Server. Fetched {len(rows)} records.")
+                result_dict = [dict(zip(columns, row)) for row in rows]
+                
+            else:
+                return json.dumps({"error": f"Unsupported database vendor: {vendor}"})
+                
             logger.debug(f"Result of query {query}: {result_dict}")
             return json.dumps(result_dict, cls=CustomJSONEncoder)
     except Exception as e:
