@@ -87,6 +87,19 @@ async def list_tools() -> list[types.Tool]:
             },
             annotations={"readOnlyHint": True, "openWorldHint": False},
         ),
+        types.Tool(
+            name="http_get_request",
+            description="Makes an HTTP GET request to the specified URL with optional headers.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL to send the GET request to."},
+                    "headers": {"type": "array", "description": "List of request headers."}
+                },
+                "required": ["url"],
+            },
+            annotations={"readOnlyHint": True, "openWorldHint": True},
+        ),
     ]
 
 @server.call_tool()
@@ -109,43 +122,13 @@ async def handle_tool_call(
         if query == None:
             ValueError("Parameter 'query' is missing")
         response = await execute_sql_query(dbname, query)
+    if name == "http_get_request":
+        url = arguments["url"]
+        if url == None:
+            ValueError("Parameter 'url' is missing")
+        response = await http_get_request(url, arguments["headers"])
 
     return to_text_context(response)        
-
-
-# async def get_os_info() -> str:
-#     """Get information about the local operating system"""
-#     logger.info("get_os_info called")
-
-#     project_folder = await get_project_folder(server, config)
-
-#     os_info = {
-#         "system": platform.system(),
-#         "release": platform.release(),
-#         "version": platform.version(),
-#         "machine": platform.machine(),
-#         "processor": platform.processor(),
-#         "python_version": platform.python_version(),
-#         "workspace_folder": project_folder
-#     }
-
-#     # Get additional info based on the platform
-#     if platform.system() == "Windows":
-#         os_info["edition"] = (
-#             platform.win32_edition() if hasattr(platform, "win32_edition") else "N/A"
-#         )
-#         os_info["is_64bit"] = platform.machine().endswith("64")
-#     elif platform.system() in ["Darwin", "Linux"]:
-#         try:
-#             uname_result = os.uname()
-#             os_info["node"] = uname_result.nodename
-#             os_info["kernel"] = uname_result.release
-#         except AttributeError:
-#             pass
-
-#     logger.info(f"Collected OS info: {os_info}")
-#     return json.dumps(os_info, cls=CustomJSONEncoder)
-
 
 async def execute_sql_query(dbname: str, query: str) -> str:
     """Executes a read-only SQL query on a PostgreSQL database and returns the result as JSON.
@@ -166,6 +149,35 @@ async def execute_sql_query(dbname: str, query: str) -> str:
         return json.dumps({"error": str(e)})
 
 
+async def http_get_request(url: str, headers: dict = None) -> str:
+    """Makes an HTTP GET request to the specified URL with optional headers.
+    This is a read-only operation that retrieves data from a web service.
+
+    Args:
+        url (str): The URL to send the GET request to.
+        headers (dict, optional): Dictionary of HTTP headers to include. Defaults to None.
+
+    Returns:
+        str: A JSON string containing the response status, headers, and body, or an error message.
+    """
+    logger.info(f"Making GET request to: {url}")
+    if url.startswith("http://"):
+        logger.error(f"Invalid URL: {url}. URL must start with 'https://'.")
+        return json.dumps({"error": "Invalid URL. Must start with 'https://'."})
+
+    try:
+        async with http_client_context() as client:
+            response = await client.get(url, headers=headers or {})
+            response.raise_for_status()
+            result = {
+                "status_code": response.status_code,
+                "headers": dict(response.headers),
+                "body": response.text,
+            }
+            return json.dumps(result, cls=CustomJSONEncoder)
+    except Exception as e:
+        logger.error(f"Unexpected error in http_get_request: {e}", exc_info=True)
+        return json.dumps({"error": f"Unexpected server error: {str(e)}"})
 
 
 async def web_search(query: str) -> str:
