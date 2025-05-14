@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import subprocess
 from typing import AsyncIterator
 
@@ -88,6 +89,30 @@ async def list_tools() -> list[types.Tool]:
             annotations={"readOnlyHint": True, "openWorldHint": True},
         ),
         types.Tool(
+            name="run_maven_tests",
+            description="Runs Maven tests. Executes 'mvn test -q -Dtest=<test_pattern> surefire-report:report'",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "test_pattern": {"type": "string", "description": "The pattern matching test files to execute"}
+                },
+                "required": ["test_pattern"],
+            },
+            annotations={"readOnlyHint": True, "openWorldHint": True},
+        ),
+        types.Tool(
+            name="run_gradle_tests",
+            description="Runs Gradle tests. Executes 'gradlew test -tests <test_pattern>'",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "test_pattern": {"type": "string", "description": "The pattern matching test files to execute"}
+                },
+                "required": ["test_pattern"],
+            },
+            annotations={"readOnlyHint": True, "openWorldHint": True},
+        ),
+        types.Tool(
             name="execute_sql_query",
             description="Executes a read-only SQL query on a PostgreSQL database and returns the result as JSON.",
             inputSchema={
@@ -128,7 +153,7 @@ async def handle_tool_call(
             ValueError("Parameter 'query' is missing")
         response = await web_search(query)
     if name == "open_in_browser":
-        url = arguments["query"]
+        url = arguments["url"]
         if url == None:
             ValueError("Parameter 'url' is missing")
         response = await open_in_browser(url)
@@ -145,6 +170,16 @@ async def handle_tool_call(
         if url == None:
             ValueError("Parameter 'url' is missing")
         response = await http_get_request(url, arguments["headers"])
+    if name == "run_maven_tests":
+        test_pattern = arguments["test_pattern"]
+        if test_pattern == None:
+            ValueError("Parameter 'test_pattern' is missing")
+        response = await run_tests("mvn", test_pattern)
+    if name == "run_gradle_tests":
+        test_pattern = arguments["test_pattern"]
+        if test_pattern == None:
+            ValueError("Parameter 'test_pattern' is missing")
+        response = await run_tests("gradlew", test_pattern)
 
     return to_text_context(response)        
 
@@ -341,6 +376,73 @@ async def open_in_browser(url: str) -> str:
         logger.error(f"Error opening url in browser: {e}", exc_info=True)
         return f"Error: {str(e)}"
     
+async def run_gradle_tests(test_pattern: str) -> str:
+    """Runs Gradle tests. 
+    Executes "gradlew test --tests <test_pattern>" in the workspace directory.
+    If no test pattern is provided, it runs all tests.
+
+    Args:
+        test_pattern (str): The pattern matching test files to execute.
+
+    Returns:
+        str: The output of the Gradle test execution.
+    """
+    return await run_tests("gradlew", test_pattern)
+
+
+async def run_maven_tests(test_pattern: str) -> str:
+    """Runs Maven tests.
+
+    Args:
+        test_pattern (str): The pattern matching test files to execute.
+
+    Returns:
+        str: The output of the Maven test execution.
+    """
+    return await run_tests("mvn", test_pattern)
+
+async def run_tests(tool_name: str, test_pattern: str):
+    workspace_path = await get_project_folder(server, config)
+    if not workspace_path:
+        logger.error("Workspace path is not set in the configuration.")
+        return "Error: Workspace path is not set in the configuration."
+
+    try:
+        if not test_pattern:
+            test_pattern = "*"
+        if tool_name == "mvn":
+            # remove old test results using python file operetions
+            test_results_path = os.path.join(workspace_path, "target", "surefire-reports")
+            # site_path = os.path.join(workspace_path, "target", "site")
+            shutil.rmtree(test_results_path)
+            # shutil.rmtree(site_path)
+            # Maven command (with "quit" option)
+            test_command = [tool_name, "test", "-q", f"-Dtest={test_pattern}", "surefire-report:report"]
+        else:
+            # Gradle command, make sure report generation is configured in build.gradle
+            test_command = [tool_name, "test", "--tests", test_pattern]
+
+        logger.debug(f"Running test command: {' '.join(test_command)} in {workspace_path}")
+        # Execute the command in the workspace directory
+        result = subprocess.run(
+            test_command,
+            cwd=workspace_path,
+            text=True,
+            capture_output=True,
+        )
+
+        # Check if the command was successful
+        if result.returncode == 0:
+            logger.info(f"Tests executed successfully: {result.stdout}")
+            return result.stdout
+        else:
+            errmsg = result.stdout + "\n" + result.stderr
+            logger.error(f"Tests failed: {errmsg}")
+            return f"Error: {errmsg}"
+    except Exception as e:
+        logger.error(f"Error running tests: {e}", exc_info=True)
+        return f"Error: {str(e)}"
+
 async def run():
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         await server.run(
