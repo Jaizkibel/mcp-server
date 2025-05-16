@@ -7,7 +7,8 @@ from mcp_server_low import (
     execute_sql_query,
     http_get_request,
     config,
-    web_search
+    web_search,
+    open_in_browser
 )    
 import datetime
 import requests
@@ -47,6 +48,13 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
 
         result = await execute_sql_query(db_name, "SELECT 1.23456789 as result")
         self.assertEqual(result, "[{\"result\": 1.23456789}]")
+
+    @patch("utils.mcp.get_project_folder")
+    async def test_open_in_browser(self, mock_get_project_folder):
+        moc_client = AsyncMock
+        mock_get_project_folder.return_value = "x/"
+        result = await open_in_browser(".tests/test_page.html")
+        self.assertTrue(result = "Browser successfully opened")
 
     async def test_web_query(self):
         findings_text = await web_search("latest gradle version")

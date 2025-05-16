@@ -413,9 +413,7 @@ async def run_tests(tool_name: str, test_pattern: str):
         if tool_name == "mvn":
             # remove old test results using python file operetions
             test_results_path = os.path.join(workspace_path, "target", "surefire-reports")
-            # site_path = os.path.join(workspace_path, "target", "site")
             shutil.rmtree(test_results_path)
-            # shutil.rmtree(site_path)
             # Maven command (with "quit" option)
             test_command = [tool_name, "test", "-q", f"-Dtest={test_pattern}", "surefire-report:report"]
         else:
