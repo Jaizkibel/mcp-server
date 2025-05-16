@@ -2,9 +2,9 @@ from contextlib import asynccontextmanager
 import json
 import os
 from pathlib import Path
-import platform
 import shutil
 import subprocess
+import asyncio
 from typing import AsyncIterator
 
 import mcp.server.stdio
@@ -358,20 +358,17 @@ async def open_in_browser(url: str) -> str:
         url = f"{workspace_path}/{url}"
 
     try:
-        command = [browser_command, url]
         # Execute command to open browser
-        result = subprocess.run(
-            command,
-            text=True,
-            capture_output=True,
+        # Popen returns immediatly after executing commnad
+        subprocess.Popen(
+            [browser_command, url],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True
         )
-
-        # Check if the command was successful
-        if result.returncode == 0:
-            logger.info(f"result of open_in_browser: {result}")
-            return "Browser successfully opened"
-        else:
-            return f"Error: {result.stderr}"
+        return "Browser successfully opened"
     except Exception as e:
         logger.error(f"Error opening url in browser: {e}", exc_info=True)
         return f"Error: {str(e)}"
@@ -463,8 +460,6 @@ async def cleanup():
     logger.info("Cleanup completed.")
 
 if __name__ == "__main__":
-    import asyncio
-
     # Parse command-line arguments
     args = parse_arguments()
     logger.info(f"Command-line arguments: {args}")
