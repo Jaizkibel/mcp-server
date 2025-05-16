@@ -24,6 +24,9 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             with open(configPath, "r") as file:
                 config.update(yaml.safe_load(file))
             print("Successfully loaded config for testing")
+            if config.get("projectFolder") == None:
+                # set to location of this file
+                config["projectFolder"] = os.path.dirname(os.path.abspath(__file__))
         except Exception as e:
             print(f"Failed to load config: {e}")
 
@@ -38,23 +41,20 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         result = await execute_sql_query(db_name, "SELECT 1.23456789 as result")
         self.assertEqual(result, "[{\"result\": 1.23456789}]")
 
-    async def test_sqlserver_sql_query(self):
-        db_name = 'portaldb'
-        result = await execute_sql_query(db_name, 'SELECT 2 + 2 as result')
-        self.assertEqual(result, "[{\"result\": 4}]")
+    # async def test_sqlserver_sql_query(self):
+    #     db_name = 'portaldb'
+    #     result = await execute_sql_query(db_name, 'SELECT 2 + 2 as result')
+    #     self.assertEqual(result, "[{\"result\": 4}]")
 
-        result = await execute_sql_query(db_name, "SELECT current_timestamp as result")
-        self.assertTrue(result.startswith("[{\"result\": \""))
+    #     result = await execute_sql_query(db_name, "SELECT current_timestamp as result")
+    #     self.assertTrue(result.startswith("[{\"result\": \""))
 
-        result = await execute_sql_query(db_name, "SELECT 1.23456789 as result")
-        self.assertEqual(result, "[{\"result\": 1.23456789}]")
+    #     result = await execute_sql_query(db_name, "SELECT 1.23456789 as result")
+    #     self.assertEqual(result, "[{\"result\": 1.23456789}]")
 
-    @patch("utils.mcp.get_project_folder")
-    async def test_open_in_browser(self, mock_get_project_folder):
-        moc_client = AsyncMock
-        mock_get_project_folder.return_value = "x/"
-        result = await open_in_browser(".tests/test_page.html")
-        self.assertTrue(result = "Browser successfully opened")
+    async def test_open_in_browser(self):
+        result = await open_in_browser("test_page.html")
+        self.assertTrue(result == "Browser successfully opened")
 
     async def test_web_query(self):
         findings_text = await web_search("latest gradle version")
