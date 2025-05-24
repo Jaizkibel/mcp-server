@@ -5,6 +5,7 @@ from decimal import Decimal
 import json
 import logging
 from bs4 import BeautifulSoup
+from markdownify import markdownify as md, STRIP
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,15 @@ def strip_text_from_html(html_content: bytes) -> str:
         return "\n".join(line for line in text_lines if line)
     except Exception as e:
         logger.error(f"Error stripping HTML: {e}", exc_info=True)
+        return "Error processing HTML content"
+
+def html_to_markdown(html_content: bytes) -> str:
+    """converts html to markdown"""
+    try:
+        decoded_html: str = html_content.decode('utf-8')
+        return md(decoded_html, strip_document=STRIP)
+    except Exception as e:
+        logger.error(f"Error conerting HTML to markdown: {e}", exc_info=True)
         return "Error processing HTML content" 
 
 def strip_strong_tags(text: str) -> str:

@@ -28,7 +28,7 @@ async def get_project_folder(server: Server, config: dict) -> str:
             roots = await session.list_roots()
             logger.debug(f"Client roots: {roots}")
             # roots are always of type file (not http),
-            # so we dont need to filter
+            # so we don't need to filter
             uri = roots.roots[0].uri
             logger.debug(f"root path: {uri.path}")
             return uri.path
