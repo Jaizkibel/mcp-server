@@ -15,23 +15,21 @@ import logging
 
 import yaml
 
+from utils.helpers import init_logging
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
 from utils.mcp import get_project_folder, is_relative_path, to_text_context
 from utils.web import (
     CustomJSONEncoder,
     close_http_client,
+    html_to_markdown,
     http_client_context,
     strip_strong_tags,
     strip_text_from_html,
 )
 
 # Configure logging
-logging.basicConfig(
-    filename="mcp_server_low.log",
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
+init_logging("log", "mcp_server.log")
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +64,7 @@ async def list_tools() -> list[types.Tool]:
     return [
         types.Tool(
             name="web_search",
-            description="Search the web for information using the Brave search API. Returns a JSON string containing the URLs, descriptions, and fetched content of the top 3 results.",
+            description="Search the web for information using the Brave search API. Returns a JSON string containing the URLs, descriptions, and fetched content of the top 3 results. The HTML content is coneverted to markdown",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -284,7 +282,7 @@ async def web_search(query: str) -> str:
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "").lower()
                 if "text/html" in content_type:
-                    text = strip_text_from_html(response.content)
+                    text = html_to_markdown(response.content)
                     meta["content"] = text[:10000]
                     logger.info(
                         f"Successfully fetched and processed content from {meta['url']}"
