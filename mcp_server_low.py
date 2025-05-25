@@ -15,7 +15,7 @@ import logging
 
 import yaml
 
-from utils.helpers import init_logging
+from utils.helpers import handle_cmd_result, init_logging
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
 from utils.mcp import get_project_folder, is_relative_path, to_text_context
@@ -49,14 +49,6 @@ async def server_lifespan(server: Server) -> AsyncIterator[dict]:
 
 # Pass lifespan to server
 server = Server("low-level-server", lifespan=server_lifespan)
-
-# Access lifespan context in handlers
-# @server.call_tool()
-# async def query_db(name: str, arguments: dict) -> list:
-#     ctx = server.request_context
-#     db = ctx.lifespan_context["db"]
-#     return await db.query(arguments["query"])
-
 
 @server.list_tools()
 async def list_tools() -> list[types.Tool]:
@@ -96,7 +88,7 @@ async def list_tools() -> list[types.Tool]:
                 },
                 "required": ["test_pattern"],
             },
-            annotations={"readOnlyHint": True, "openWorldHint": True},
+            annotations={"readOnlyHint": True, "openWorldHint": False},
         ),
         types.Tool(
             name="run_gradle_tests",
@@ -108,7 +100,19 @@ async def list_tools() -> list[types.Tool]:
                 },
                 "required": ["test_pattern"],
             },
-            annotations={"readOnlyHint": True, "openWorldHint": True},
+            annotations={"readOnlyHint": True, "openWorldHint": False},
+        ),
+        types.Tool(
+            name="decompile_java_class",
+            description="Decompiles a Java class and returns the source code of that class. Does not work with classes from Java standard libraries.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "class_name": {"type": "string", "description": "The full class name. Example: 'java.util.List'"}
+                },
+                "required": ["class_name"],
+            },
+            annotations={"readOnlyHint": True, "openWorldHint": False},
         ),
         types.Tool(
             name="execute_sql_query",
@@ -169,15 +173,20 @@ async def handle_tool_call(
             ValueError("Parameter 'url' is missing")
         response = await http_get_request(url, arguments["headers"])
     if name == "run_maven_tests":
-        test_pattern = arguments["test_pattern"]
-        if test_pattern == None:
+        class_name = arguments["test_pattern"]
+        if class_name == None:
             ValueError("Parameter 'test_pattern' is missing")
-        response = await run_tests("mvn", test_pattern)
+        response = await run_tests("mvn", class_name)
     if name == "run_gradle_tests":
-        test_pattern = arguments["test_pattern"]
-        if test_pattern == None:
+        class_name = arguments["test_pattern"]
+        if class_name == None:
             ValueError("Parameter 'test_pattern' is missing")
-        response = await run_tests("gradlew", test_pattern)
+        response = await run_tests("gradlew", class_name)
+    if name == "decompile_java_class":
+        class_name = arguments["class_name"]
+        if class_name == None:
+            ValueError("Parameter 'tclass_name' is missing")
+        response = await decompile_java_class(class_name)
 
     return to_text_context(response)        
 
@@ -375,24 +384,31 @@ async def run_gradle_tests(test_pattern: str) -> str:
     """Runs Gradle tests. 
     Executes "gradlew test --tests <test_pattern>" in the workspace directory.
     If no test pattern is provided, it runs all tests.
-
-    Args:
-        test_pattern (str): The pattern matching test files to execute.
-
-    Returns:
-        str: The output of the Gradle test execution.
     """
     return await run_tests("gradlew", test_pattern)
+
+async def decompile_java_class(class_name: str) -> str:
+    """Decompiles a Java class and returns the sorce code.
+    """
+    # workspace_path = await get_project_folder(server, config)
+    workspace_path = "/home/kruese/IdeaProjects/github/boot-demo"
+    if not workspace_path:
+        logger.error("Workspace path is not set in the configuration.")
+        return "Error: Workspace path is not set in the configuration."
+    
+    command = ["./bin/gradle-decompile.sh", workspace_path, class_name]
+    logger.info(f"Executing '${' '.join(command)}'")
+    result = subprocess.run(
+        command,
+        # cwd=workspace_path,
+        text=True,
+        capture_output=True,
+    )
+    return handle_cmd_result(result)
 
 
 async def run_maven_tests(test_pattern: str) -> str:
     """Runs Maven tests.
-
-    Args:
-        test_pattern (str): The pattern matching test files to execute.
-
-    Returns:
-        str: The output of the Maven test execution.
     """
     return await run_tests("mvn", test_pattern)
 
@@ -424,14 +440,7 @@ async def run_tests(tool_name: str, test_pattern: str):
             capture_output=True,
         )
 
-        # Check if the command was successful
-        if result.returncode == 0:
-            logger.info(f"Tests executed successfully: {result.stdout}")
-            return result.stdout
-        else:
-            errmsg = result.stdout + "\n" + result.stderr
-            logger.error(f"Tests failed: {errmsg}")
-            return f"Error: {errmsg}"
+        return handle_cmd_result(result)
     except Exception as e:
         logger.error(f"Error running tests: {e}", exc_info=True)
         return f"Error: {str(e)}"
