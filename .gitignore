@@ -11,10 +11,11 @@ wheels/
 
 .vscode/
 
-mcp_server.log
+*.log
 **/.DS_Store
 
 .git/
 .coverage
 .continuerc.json
 brave-api.http
+.roo/mcp.json
