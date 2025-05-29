@@ -7,6 +7,7 @@ from mcp_server_low import (
     execute_sql_query,
     http_get_request,
     config,
+    list_tools,
     web_search,
     open_in_browser
 )    
@@ -30,6 +31,12 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         except Exception as e:
             print(f"Failed to load config: {e}")
 
+    async def test_list_tools(self):
+        config["buildTool"] = "Maven"
+
+        tools = await list_tools()
+        self.assertEqual(len(tools), 7)
+
     async def test_postgres_sql_query(self):
         db_name = 'musiciandb'
         result = await execute_sql_query(db_name, 'SELECT 2 + 2 as result')
@@ -40,17 +47,6 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
 
         result = await execute_sql_query(db_name, "SELECT 1.23456789 as result")
         self.assertEqual(result, "[{\"result\": 1.23456789}]")
-
-    # async def test_sqlserver_sql_query(self):
-    #     db_name = 'portaldb'
-    #     result = await execute_sql_query(db_name, 'SELECT 2 + 2 as result')
-    #     self.assertEqual(result, "[{\"result\": 4}]")
-
-    #     result = await execute_sql_query(db_name, "SELECT current_timestamp as result")
-    #     self.assertTrue(result.startswith("[{\"result\": \""))
-
-    #     result = await execute_sql_query(db_name, "SELECT 1.23456789 as result")
-    #     self.assertEqual(result, "[{\"result\": 1.23456789}]")
 
     async def test_open_in_browser(self):
         result = await open_in_browser("test_page.html")

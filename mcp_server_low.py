@@ -50,13 +50,15 @@ async def server_lifespan(server: Server) -> AsyncIterator[dict]:
 # Pass lifespan to server
 server = Server("low-level-server", lifespan=server_lifespan)
 
+
 @server.list_tools()
 async def list_tools() -> list[types.Tool]:
     """Lists all available tools."""
-    return [
+    logger.debug("Collection tools")
+    tools = [
         types.Tool(
             name="web_search",
-            description="Search the web for information using the Brave search API. Returns a JSON string containing the URLs, descriptions, and fetched content of the top 3 results. The HTML content is coneverted to markdown",
+            description="Search the web for information using the Brave search API. Returns a JSON string containing the URLs, descriptions, and fetched content of the top 3 results. The HTML content is converted to markdown",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -72,47 +74,14 @@ async def list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "The URL or file path to open."}
+                    "url": {
+                        "type": "string",
+                        "description": "The URL or file path to open.",
+                    }
                 },
                 "required": ["url"],
             },
             annotations={"readOnlyHint": True, "openWorldHint": True},
-        ),
-        types.Tool(
-            name="run_maven_tests",
-            description="Runs Maven tests. Executes 'mvn test -q -Dtest=<test_pattern> surefire-report:report'",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "test_pattern": {"type": "string", "description": "The pattern matching test files to execute"}
-                },
-                "required": ["test_pattern"],
-            },
-            annotations={"readOnlyHint": True, "openWorldHint": False},
-        ),
-        types.Tool(
-            name="run_gradle_tests",
-            description="Runs Gradle tests. Executes 'gradlew test -tests <test_pattern>'",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "test_pattern": {"type": "string", "description": "The pattern matching test files to execute"}
-                },
-                "required": ["test_pattern"],
-            },
-            annotations={"readOnlyHint": True, "openWorldHint": False},
-        ),
-        types.Tool(
-            name="decompile_java_class",
-            description="Decompiles a Java class and returns the source code of that class. Does not work with classes from Java standard libraries.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "class_name": {"type": "string", "description": "The full class name. Example: 'java.util.List'"}
-                },
-                "required": ["class_name"],
-            },
-            annotations={"readOnlyHint": True, "openWorldHint": False},
         ),
         types.Tool(
             name="execute_sql_query",
@@ -120,10 +89,16 @@ async def list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "dbname": {"type": "string", "description": "The name of the database to connect."},
-                    "query": {"type": "string", "description": "The SQL query to execute"}
+                    "dbname": {
+                        "type": "string",
+                        "description": "The name of the database to connect.",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "The SQL query to execute",
+                    },
                 },
-                "required": ["dbname","query"],
+                "required": ["dbname", "query"],
             },
             annotations={"readOnlyHint": True, "openWorldHint": False},
         ),
@@ -133,14 +108,74 @@ async def list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "The URL to send the GET request to."},
-                    "headers": {"type": "object", "description": "Map of request headers."}
+                    "url": {
+                        "type": "string",
+                        "description": "The URL to send the GET request to.",
+                    },
+                    "headers": {
+                        "type": "object",
+                        "description": "Map of request headers.",
+                    },
                 },
                 "required": ["url"],
             },
             annotations={"readOnlyHint": True, "openWorldHint": True},
         ),
     ]
+    if config.get("buildTool") in ("Maven", "Gradle"):
+        logger.debug("Adding build related tools")
+        build_tools = [
+            types.Tool(
+                name="run_maven_tests",
+                description="Runs Maven tests. Executes 'mvn test -q -Dtest=<test_pattern> surefire-report:report'",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "test_pattern": {
+                            "type": "string",
+                            "description": "The pattern matching test files to execute",
+                        }
+                    },
+                    "required": ["test_pattern"],
+                },
+                annotations={"readOnlyHint": True, "openWorldHint": False},
+            ),
+            types.Tool(
+                name="run_gradle_tests",
+                description="Runs Gradle tests. Executes 'gradlew test -tests <test_pattern>'",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "test_pattern": {
+                            "type": "string",
+                            "description": "The pattern matching test files to execute",
+                        }
+                    },
+                    "required": ["test_pattern"],
+                },
+                annotations={"readOnlyHint": True, "openWorldHint": False},
+            ),
+            types.Tool(
+                name="decompile_java_class",
+                description="Decompiles a Java class and returns the source code of that class. Does not work with classes from Java standard libraries.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "class_name": {
+                            "type": "string",
+                            "description": "The full class name. Example: 'java.util.List'",
+                        }
+                    },
+                    "required": ["class_name"],
+                },
+                annotations={"readOnlyHint": True, "openWorldHint": False},
+            ),
+        ]
+        tools.extend(build_tools)
+
+    logger.debug(f"Collected {len(tools)} tools")
+    return tools
+
 
 @server.call_tool()
 async def handle_tool_call(
@@ -185,10 +220,11 @@ async def handle_tool_call(
     if name == "decompile_java_class":
         class_name = arguments["class_name"]
         if class_name == None:
-            ValueError("Parameter 'tclass_name' is missing")
+            ValueError("Parameter 'class_name' is missing")
         response = await decompile_java_class(class_name)
 
-    return to_text_context(response)        
+    return to_text_context(response)
+
 
 async def execute_sql_query(dbname: str, query: str) -> str:
     """Executes a read-only SQL query on a database and returns the result as JSON.
@@ -200,16 +236,18 @@ async def execute_sql_query(dbname: str, query: str) -> str:
     try:
         async with db_connection_context(dbname, config) as conn:
             logger.info("Database connection established.")
-            
+
             # Determine database vendor
             vendor = config["database"][dbname].get("vendor", "postgresql").lower()
-            
+
             if vendor == "postgresql":
                 # PostgreSQL execution
                 result = await conn.fetch(query)
-                logger.info(f"Query executed successfully on PostgreSQL. Fetched {len(result)} records.")
+                logger.info(
+                    f"Query executed successfully on PostgreSQL. Fetched {len(result)} records."
+                )
                 result_dict = [dict(record) for record in result]
-                
+
             elif vendor == "sqlserver":
                 # SQL Server execution
                 cursor = await conn.cursor()
@@ -217,13 +255,15 @@ async def execute_sql_query(dbname: str, query: str) -> str:
                 columns = [column[0] for column in cursor.description]
                 rows = await cursor.fetchall()
                 await cursor.close()
-                
-                logger.info(f"Query executed successfully on SQL Server. Fetched {len(rows)} records.")
+
+                logger.info(
+                    f"Query executed successfully on SQL Server. Fetched {len(rows)} records."
+                )
                 result_dict = [dict(zip(columns, row)) for row in rows]
-                
+
             else:
                 return json.dumps({"error": f"Unsupported database vendor: {vendor}"})
-                
+
             logger.debug(f"Result of query {query}: {result_dict}")
             return json.dumps(result_dict, cls=CustomJSONEncoder)
     except Exception as e:
@@ -269,7 +309,9 @@ async def web_search(query: str) -> str:
     brave_api_key = config["braveSearch"]["apiKey"]
     if not brave_api_key:
         logger.error("Brave API key is missing in the code.")
-        return json.dumps({"error": "Server configuration error: Brave API key missing."})
+        return json.dumps(
+            {"error": "Server configuration error: Brave API key missing."}
+        )
 
     headers = {
         "Accept": "application/json",
@@ -348,8 +390,7 @@ async def web_search(query: str) -> str:
 
 
 async def open_in_browser(url: str) -> str:
-    """Opens a url or file in the local browser
-    """
+    """Opens a url or file in the local browser"""
     if not url.endswith(".html"):
         return "Error: can open HTML pages only"
     workspace_path = await get_project_folder(server, config)
@@ -366,36 +407,37 @@ async def open_in_browser(url: str) -> str:
 
     try:
         # Execute command to open browser
-        # Popen returns immediatly after executing commnad
+        # Popen returns immediatly after executing command
         subprocess.Popen(
             [browser_command, url],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
-            close_fds=True
+            close_fds=True,
         )
         return "Browser successfully opened"
     except Exception as e:
         logger.error(f"Error opening url in browser: {e}", exc_info=True)
         return f"Error: {str(e)}"
-    
+
+
 async def run_gradle_tests(test_pattern: str) -> str:
-    """Runs Gradle tests. 
+    """Runs Gradle tests.
     Executes "gradlew test --tests <test_pattern>" in the workspace directory.
     If no test pattern is provided, it runs all tests.
     """
     return await run_tests("gradlew", test_pattern)
 
+
 async def decompile_java_class(class_name: str) -> str:
-    """Decompiles a Java class and returns the sorce code.
-    """
+    """Decompiles a Java class and returns the source code."""
     # workspace_path = await get_project_folder(server, config)
     workspace_path = "/home/kruese/IdeaProjects/github/boot-demo"
     if not workspace_path:
         logger.error("Workspace path is not set in the configuration.")
         return "Error: Workspace path is not set in the configuration."
-    
+
     command = ["./bin/gradle-decompile.sh", workspace_path, class_name]
     logger.info(f"Executing '${' '.join(command)}'")
     result = subprocess.run(
@@ -408,9 +450,9 @@ async def decompile_java_class(class_name: str) -> str:
 
 
 async def run_maven_tests(test_pattern: str) -> str:
-    """Runs Maven tests.
-    """
+    """Runs Maven tests."""
     return await run_tests("mvn", test_pattern)
+
 
 async def run_tests(tool_name: str, test_pattern: str):
     workspace_path = await get_project_folder(server, config)
@@ -422,16 +464,26 @@ async def run_tests(tool_name: str, test_pattern: str):
         if not test_pattern:
             test_pattern = "*"
         if tool_name == "mvn":
-            # remove old test results using python file operetions
-            test_results_path = os.path.join(workspace_path, "target", "surefire-reports")
+            # remove old test results using python file operations
+            test_results_path = os.path.join(
+                workspace_path, "target", "surefire-reports"
+            )
             shutil.rmtree(test_results_path)
             # Maven command (with "quit" option)
-            test_command = [tool_name, "test", "-q", f"-Dtest={test_pattern}", "surefire-report:report"]
+            test_command = [
+                tool_name,
+                "test",
+                "-q",
+                f"-Dtest={test_pattern}",
+                "surefire-report:report",
+            ]
         else:
             # Gradle command, make sure report generation is configured in build.gradle
             test_command = [tool_name, "test", "--tests", test_pattern]
 
-        logger.debug(f"Running test command: {' '.join(test_command)} in {workspace_path}")
+        logger.debug(
+            f"Running test command: {' '.join(test_command)} in {workspace_path}"
+        )
         # Execute the command in the workspace directory
         result = subprocess.run(
             test_command,
@@ -444,6 +496,7 @@ async def run_tests(tool_name: str, test_pattern: str):
     except Exception as e:
         logger.error(f"Error running tests: {e}", exc_info=True)
         return f"Error: {str(e)}"
+
 
 async def run():
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
@@ -460,11 +513,13 @@ async def run():
             ),
         )
 
+
 async def cleanup():
     """Cleanup resources when the server stops."""
     await close_db_pool()
     await close_http_client()
     logger.info("Cleanup completed.")
+
 
 if __name__ == "__main__":
     # Parse command-line arguments
@@ -481,6 +536,9 @@ if __name__ == "__main__":
         # Set current workspace foldername
         if not args.project_folder is None:
             config["projectFolder"] = args.project_folder
+        # Set Java build tool
+        if not args.build_tool is None:
+            config["buildTool"] = args.build_tool
         logger.info(f"Successfully loaded server configuration {config}")
     except Exception as e:
         logger.error(f"Failed to load config: {e}", exc_info=True)
