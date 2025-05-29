@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import asyncio
 from typing import AsyncIterator
+import zipfile
 
 import mcp.server.stdio
 import mcp.types as types
@@ -432,21 +433,58 @@ async def run_gradle_tests(test_pattern: str) -> str:
 
 async def decompile_java_class(class_name: str) -> str:
     """Decompiles a Java class and returns the source code."""
-    # workspace_path = await get_project_folder(server, config)
-    workspace_path = "/home/kruese/IdeaProjects/github/boot-demo"
-    if not workspace_path:
-        logger.error("Workspace path is not set in the configuration.")
-        return "Error: Workspace path is not set in the configuration."
 
-    command = ["./bin/gradle-decompile.sh", workspace_path, class_name]
-    logger.info(f"Executing '${' '.join(command)}'")
-    result = subprocess.run(
-        command,
-        # cwd=workspace_path,
-        text=True,
-        capture_output=True,
-    )
-    return handle_cmd_result(result)
+    if config.get("buildTool") == "Maven":
+        workspace_path = await get_project_folder(server, config)
+        if not workspace_path:
+            logger.error("Workspace path is not set in the configuration.")
+            return "Error: Workspace path is not set in the configuration."
+        mavenPath = str(Path(workspace_path) / "mvnw")
+
+        command = [mavenPath, "dependency:build-classpath"]
+        logger.info(f"Executing '${' '.join(command)}'")
+        result = subprocess.run(
+            command,
+            cwd=workspace_path,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            logger.error(f"Maven command failed: {result.stderr}")
+            return f"Error: Maven command failed: {result.stderr}"
+
+        classpath_output = result.stdout
+        classpath_start_index = classpath_output.find("Dependencies classpath:")
+        if classpath_start_index == -1:
+            logger.error("Could not find 'Dependencies classpath:' in Maven output.")
+            return "Error: Could not find classpath in Maven output."
+
+        lines = classpath_output.split("\n")
+        # find line containing ".jar"
+        classpath_lines = [l for l in lines if ".jar" in l]
+        if len(classpath_lines) != 1:
+            logger.error(f"There should only be 1 line containig jar in list {classpath_lines}")
+            return "Error: Unable to find libraries"
+        # Split by ':' to get individual JAR paths
+        jar_paths = classpath_lines[0].split(":")
+        
+        # Find first JAR containing the specified class
+        class_file = class_name.replace('.', '/') + '.class'
+        matching_jar: str = None
+        for jar in jar_paths:
+            try:
+                with zipfile.ZipFile(jar, 'r') as zip_ref:
+                    if class_file in zip_ref.namelist():
+                        matching_jar = jar
+                        break
+            except Exception as e:
+                logger.error(f"Error checking JAR {jar}: {e}")
+        
+        # continue here
+        if matching_jar is None:
+            return "Error: class not found"
+    
+    return matching_jar
 
 
 async def run_maven_tests(test_pattern: str) -> str:

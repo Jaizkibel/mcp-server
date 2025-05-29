@@ -4,6 +4,7 @@ import yaml
 import os
 from unittest.mock import patch, AsyncMock, MagicMock
 from mcp_server_low import (
+    decompile_java_class,
     execute_sql_query,
     http_get_request,
     config,
@@ -63,6 +64,13 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("<strong>", finding["description"])
             self.assertIsNotNone(finding["content"])
             self.assertIn("gradle", finding["content"].lower())
+
+    async def test_decompile_class(self):
+        config["buildTool"] = "Maven"
+        # path to maven proejct required
+        config["projectFolder"] = "/home/kruese/src/spring/mcp-decompiler"
+        jar = await decompile_java_class("ch.qos.logback.classic.AsyncAppender")
+        self.assertTrue("logback in jar")
 
     @patch('utils.web.get_http_client')
     async def test_http_get_request_success(self, mock_get_client):
