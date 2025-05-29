@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import asyncio
@@ -34,7 +35,8 @@ init_logging("log", "mcp_server.log")
 
 logger = logging.getLogger(__name__)
 
-configPath = f"{Path.home()}/.mcp-server/config.yml"
+rootPath: Path = Path(__file__).parent
+configPath: str = f"{Path.home()}/.mcp-server/config.yml"
 config = {}
 
 
@@ -123,7 +125,7 @@ async def list_tools() -> list[types.Tool]:
             annotations={"readOnlyHint": True, "openWorldHint": True},
         ),
     ]
-    if config.get("buildTool") in ("Maven", "Gradle"):
+    if config.get("buildTool") is not None:
         logger.debug("Adding build related tools")
         build_tools = [
             types.Tool(
@@ -434,17 +436,17 @@ async def run_gradle_tests(test_pattern: str) -> str:
 async def decompile_java_class(class_name: str) -> str:
     """Decompiles a Java class and returns the source code."""
 
-    if config.get("buildTool") == "Maven":
+    if config.get("buildTool") in ("mvn", "mvnw"):
         workspace_path = await get_project_folder(server, config)
         if not workspace_path:
             logger.error("Workspace path is not set in the configuration.")
             return "Error: Workspace path is not set in the configuration."
-        mavenPath = str(Path(workspace_path) / "mvnw")
+        mavenPath = str(Path(workspace_path) / config["buildTool"])
 
-        command = [mavenPath, "dependency:build-classpath"]
-        logger.info(f"Executing '${' '.join(command)}'")
+        mvn_command = [mavenPath, "dependency:build-classpath"]
+        logger.info(f"Executing '${' '.join(mvn_command)}'")
         result = subprocess.run(
-            command,
+            mvn_command,
             cwd=workspace_path,
             text=True,
             capture_output=True,
@@ -480,11 +482,31 @@ async def decompile_java_class(class_name: str) -> str:
             except Exception as e:
                 logger.error(f"Error checking JAR {jar}: {e}")
         
-        # continue here
         if matching_jar is None:
             return "Error: class not found"
     
-    return matching_jar
+        #   java -jar $DECOMPILER_JAR --outputConsole --logLevel=OFF --pattern "$CLASS_NAME" $JAR_PATHS | grep -v "INFO\\|WARN"
+        decompile_command = ["java","-jar", "bin/jd-cli.jar", "--outputConsole",
+                             "--pattern", f"\"{class_name}\"", matching_jar]
+        logger.info(f"Executing '{' '.join(decompile_command)}'")
+        result = subprocess.run(
+            decompile_command,
+            cwd=rootPath,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            logger.error(f"Java decompile command failed: {result.stderr}")
+            return f"Error: Decompile command failed: {result.stderr}"
+        
+        # there is logging output in the result. 
+        # remove it
+        lines = result.stdout.split("\n")
+        source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d{3}', l)]
+        return '\n'.join(source_lines)
+
+
+    return "Error: Build tool not defined."
 
 
 async def run_maven_tests(test_pattern: str) -> str:
