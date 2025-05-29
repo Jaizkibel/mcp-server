@@ -502,7 +502,7 @@ async def decompile_java_class(class_name: str) -> str:
         # there is logging output in the result. 
         # remove it
         lines = result.stdout.split("\n")
-        source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d{3}', l)]
+        source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d{3} (INFO|WARN)', l)]
         return '\n'.join(source_lines)
 
 
