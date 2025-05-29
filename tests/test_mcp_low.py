@@ -65,12 +65,12 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(finding["content"])
             self.assertIn("gradle", finding["content"].lower())
 
-    async def test_decompile_class(self):
-        config["buildTool"] = "Maven"
+    async def test_decompile_class_maven(self):
+        config["buildTool"] = "mvnw"
         # path to maven proejct required
         config["projectFolder"] = "/home/kruese/src/spring/mcp-decompiler"
-        jar = await decompile_java_class("ch.qos.logback.classic.AsyncAppender")
-        self.assertTrue("logback in jar")
+        code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
+        self.assertTrue(code.startswith("package"))
 
     @patch('utils.web.get_http_client')
     async def test_http_get_request_success(self, mock_get_client):
