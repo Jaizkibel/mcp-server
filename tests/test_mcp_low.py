@@ -66,9 +66,9 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertIn("gradle", finding["content"].lower())
 
     async def test_decompile_class_maven(self):
-        config["buildTool"] = "mvnw"
-        # path to maven proejct required
-        config["projectFolder"] = "/home/kruese/src/spring/mcp-decompiler"
+        config["buildTool"] = "mvn"
+        # path to maven project required
+        config["projectFolder"] = "/Users/ANNO.KRUESEMANN/IdeaProjects/github/cp-postbox-service"
         code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(code.startswith("package"))
 

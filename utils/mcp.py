@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 def to_text_context(text: str) -> list[types.TextContent]: 
     """ convert text to list of TextContent needed as tool call return value"""
+    # logger.debug(f"converting text '{text}' to list of TextContent")
+    if text is None:
+        text = "No text available"
     return [types.TextContent(type="text", text=text)]
 
 async def get_project_folder(server: Server, config: dict) -> str:

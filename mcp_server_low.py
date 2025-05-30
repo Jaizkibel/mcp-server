@@ -186,47 +186,52 @@ async def handle_tool_call(
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
     """handles all tool calls!!!"""
 
-    response = f"Error: Tool {name} not found"
-    if name == "web_search":
-        query = arguments["query"]
-        if query == None:
-            ValueError("Parameter 'query' is missing")
-        response = await web_search(query)
-    if name == "open_in_browser":
-        url = arguments["url"]
-        if url == None:
-            ValueError("Parameter 'url' is missing")
-        response = await open_in_browser(url)
-    if name == "execute_sql_query":
-        dbname = arguments["dbname"]
-        if dbname == None:
-            ValueError("Parameter 'dbname' is missing")
-        query = arguments["query"]
-        if query == None:
-            ValueError("Parameter 'query' is missing")
-        response = await execute_sql_query(dbname, query)
-    if name == "http_get_request":
-        url = arguments["url"]
-        if url == None:
-            ValueError("Parameter 'url' is missing")
-        response = await http_get_request(url, arguments["headers"])
-    if name == "run_maven_tests":
-        class_name = arguments["test_pattern"]
-        if class_name == None:
-            ValueError("Parameter 'test_pattern' is missing")
-        response = await run_tests("mvn", class_name)
-    if name == "run_gradle_tests":
-        class_name = arguments["test_pattern"]
-        if class_name == None:
-            ValueError("Parameter 'test_pattern' is missing")
-        response = await run_tests("gradlew", class_name)
-    if name == "decompile_java_class":
-        class_name = arguments["class_name"]
-        if class_name == None:
-            ValueError("Parameter 'class_name' is missing")
-        response = await decompile_java_class(class_name)
-
-    return to_text_context(response)
+    try: 
+        logger.debug(f"handling tool '{name}' with args {arguments}")
+        response = f"Error: Tool '{name}' not found"
+        if name == "web_search":
+            query = arguments.get("query")
+            if query == None:
+                raise ValueError("Parameter 'query' is missing")
+            response = await web_search(query)
+        if name == "open_in_browser":
+            url = arguments.get("url")
+            if url == None:
+                raise ValueError("Parameter 'url' is missing")
+            response = await open_in_browser(url)
+        if name == "execute_sql_query":
+            dbname = arguments.get("dbname")
+            if dbname == None:
+                raise ValueError("Parameter 'dbname' is missing")
+            query = arguments.get("query")
+            if query == None:
+                raise ValueError("Parameter 'query' is missing")
+            response = await execute_sql_query(dbname, query)
+        if name == "http_get_request":
+            url = arguments.get("url")
+            if url == None:
+                raise ValueError("Parameter 'url' is missing")
+            response = await http_get_request(url, arguments.get("headers"))
+        if name == "run_maven_tests":
+            class_name = arguments.get("test_pattern")
+            if class_name == None:
+                raise ValueError("Parameter 'test_pattern' is missing")
+            response = await run_tests("mvn", class_name)
+        if name == "run_gradle_tests":
+            class_name = arguments.get("test_pattern")
+            if class_name == None:
+                raise ValueError("Parameter 'test_pattern' is missing")
+            response = await run_tests("gradlew", class_name)
+        if name == "decompile_java_class":
+            class_name = arguments.get("class_name")
+            if class_name == None:
+                raise ValueError("Parameter 'class_name' is missing")
+            response = await decompile_java_class(class_name)
+    except Exception as e: 
+        logger.error(f"Error handling tool call '{name}': {arguments}", exc_info=True)
+        response = json.dumps({"error": f"Error handling tool call '{name}': {str(e)}"})
+    finally:
+        return to_text_context(response)
 
 
 async def execute_sql_query(dbname: str, query: str) -> str:
@@ -436,15 +441,18 @@ async def run_gradle_tests(test_pattern: str) -> str:
 async def decompile_java_class(class_name: str) -> str:
     """Decompiles a Java class and returns the source code."""
 
-    if config.get("buildTool") in ("mvn", "mvnw"):
+    build_tool = config.get("buildTool")
+    if build_tool is None:
+        return "Error: Build tool not defined."
+
+    if build_tool in ("mvn", "mvnw"):
         workspace_path = await get_project_folder(server, config)
         if not workspace_path:
             logger.error("Workspace path is not set in the configuration.")
             return "Error: Workspace path is not set in the configuration."
-        mavenPath = str(Path(workspace_path) / config["buildTool"])
-
-        mvn_command = [mavenPath, "dependency:build-classpath"]
-        logger.info(f"Executing '${' '.join(mvn_command)}'")
+        
+        mvn_command = [build_tool, "dependency:build-classpath"]
+        logger.info(f"Executing '{' '.join(mvn_command)}'")
         result = subprocess.run(
             mvn_command,
             cwd=workspace_path,
@@ -485,9 +493,13 @@ async def decompile_java_class(class_name: str) -> str:
         if matching_jar is None:
             return "Error: class not found"
     
-        #   java -jar $DECOMPILER_JAR --outputConsole --logLevel=OFF --pattern "$CLASS_NAME" $JAR_PATHS | grep -v "INFO\\|WARN"
-        decompile_command = ["java","-jar", "bin/jd-cli.jar", "--outputConsole",
-                             "--pattern", f"\"{class_name}\"", matching_jar]
+        # Fix: Check if decompiler JAR exists before trying to use it
+        decompiler_jar = rootPath / "bin" / "jd-cli.jar"
+        if not decompiler_jar.exists():
+            return f"Error: Decompiler JAR not found at {decompiler_jar}"
+    
+        decompile_command = ["java", "-jar", str(decompiler_jar), "--outputConsole",
+                             "--pattern", class_name, matching_jar]  # Remove quotes around class_name
         logger.info(f"Executing '{' '.join(decompile_command)}'")
         result = subprocess.run(
             decompile_command,
@@ -499,14 +511,12 @@ async def decompile_java_class(class_name: str) -> str:
             logger.error(f"Java decompile command failed: {result.stderr}")
             return f"Error: Decompile command failed: {result.stderr}"
         
-        # there is logging output in the result. 
-        # remove it
+        # Filter out logging output from the result
         lines = result.stdout.split("\n")
         source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d{3} (INFO|WARN)', l)]
         return '\n'.join(source_lines)
-
-
-    return "Error: Build tool not defined."
+    else:
+        return f"Error: Build tool '{build_tool}' not yet implemented. Only Maven (mvn/mvnw) is supported."
 
 
 async def run_maven_tests(test_pattern: str) -> str:
