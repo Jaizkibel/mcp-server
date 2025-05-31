@@ -92,7 +92,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="execute_sql_query",
-            description="Executes a read-only SQL query on a PostgreSQL database and returns the result as JSON.",
+            description="Executes a read-only SQL query on a PostgreSQL or SqlServer database and returns the result as JSON.",
             inputSchema={
                 "type": "object",
                 "properties": {
