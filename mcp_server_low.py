@@ -17,7 +17,7 @@ import logging
 
 import yaml
 
-from utils.helpers import handle_cmd_result, init_logging
+from utils.helpers import get_gradle_jars, handle_cmd_result, init_logging, get_maven_jars
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
 from utils.mcp import get_project_folder, is_relative_path, to_text_context
@@ -415,7 +415,7 @@ async def open_in_browser(url: str) -> str:
 
     try:
         # Execute command to open browser
-        # Popen returns immediatly after executing command
+        # Popen returns immediately after executing command
         subprocess.Popen(
             [browser_command, url],
             stdout=subprocess.DEVNULL,
@@ -449,75 +449,49 @@ async def decompile_java_class(class_name: str) -> str:
     if not workspace_path:
         logger.error("Workspace path is not set in the configuration.")
         return "Error: Workspace path is not set in the configuration."
+    
     if "mvn" in build_tool:
-        mvn_command = [build_tool, "dependency:build-classpath"]
-        logger.info(f"Executing '{' '.join(mvn_command)}'")
-        result = subprocess.run(
-            mvn_command,
-            cwd=workspace_path,
-            text=True,
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            logger.error(f"Maven command failed: {result.stderr}")
-            return f"Error: Maven command failed: {result.stderr}"
-
-        classpath_output = result.stdout
-        classpath_start_index = classpath_output.find("Dependencies classpath:")
-        if classpath_start_index == -1:
-            logger.error("Could not find 'Dependencies classpath:' in Maven output.")
-            return "Error: Could not find classpath in Maven output."
-
-        lines = classpath_output.split("\n")
-        # find line containing ".jar"
-        classpath_lines = [l for l in lines if ".jar" in l]
-        if len(classpath_lines) != 1:
-            logger.error(f"There should only be 1 line containig jar in list {classpath_lines}")
-            return "Error: Unable to find libraries"
-        # Split by ':' to get individual JAR paths
-        jar_paths = classpath_lines[0].split(":")
-        
-        # Find first JAR containing the specified class
-        class_file = class_name.replace('.', '/') + '.class'
-        matching_jar: str = None
-        for jar in jar_paths:
-            try:
-                with zipfile.ZipFile(jar, 'r') as zip_ref:
-                    if class_file in zip_ref.namelist():
-                        matching_jar = jar
-                        break
-            except Exception as e:
-                logger.error(f"Error checking JAR {jar}: {e}")
-        
-        if matching_jar is None:
-            return "Error: class not found"
-    
-        # Fix: Check if decompiler JAR exists before trying to use it
-        decompiler_jar = rootPath / "bin" / "jd-cli.jar"
-        if not decompiler_jar.exists():
-            return f"Error: Decompiler JAR not found at {decompiler_jar}"
-    
-        decompile_command = ["java", "-jar", str(decompiler_jar), "--outputConsole",
-                             "--pattern", class_name, matching_jar]  # Remove quotes around class_name
-        logger.info(f"Executing '{' '.join(decompile_command)}'")
-        result = subprocess.run(
-            decompile_command,
-            cwd=rootPath,
-            text=True,
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            logger.error(f"Java decompile command failed: {result.stderr}")
-            return f"Error: Decompile command failed: {result.stderr}"
-        
-        # Filter out logging output from the result
-        # there is logging output in the decompiler output. 
-        # remove it
-        lines = result.stdout.split("\n")
-        source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d+ (INFO|WARN)', l)]
-        return '\n'.join(source_lines)
+        jar_paths = get_maven_jars(build_tool, workspace_path)
+    elif "gradle" in build_tool:        
+        jar_paths = get_gradle_jars(build_tool, workspace_path)
     else:
-        return f"Error: Build tool '{build_tool}' not yet implemented. Only Maven (mvn/mvnw) is supported."
+        return f"Error: Build tool {build_tool} is not supported"        
+
+    # Find first JAR containing the specified class
+    class_file = class_name.replace('.', '/') + '.class'
+    matching_jar: str = None
+    for jar in jar_paths:
+        try:
+            with zipfile.ZipFile(jar, 'r') as zip_ref:
+                if class_file in zip_ref.namelist():
+                    matching_jar = jar
+                    break
+        except Exception as e:
+            logger.error(f"Error checking JAR {jar}: {e}")
+    
+    if matching_jar is None:
+        return "Error: class not found"
+
+    decompiler_jar = rootPath / "bin" / "jd-cli.jar"
+    decompile_command = ["java", "-jar", str(decompiler_jar), "--outputConsole",
+                            "--pattern", class_name, matching_jar]  # Remove quotes around class_name
+    logger.info(f"Executing '{' '.join(decompile_command)}'")
+    result = subprocess.run(
+        decompile_command,
+        cwd=rootPath,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        logger.error(f"Java decompile command failed: {result.stderr}")
+        return f"Error: Decompile command failed: {result.stderr}"
+    
+    # Filter out logging output from the result
+    # there is logging output in the decompiler output. 
+    # remove it
+    lines = result.stdout.split("\n")
+    source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d+ (INFO|WARN)', l)]
+    return '\n'.join(source_lines)
 
 
 async def run_maven_tests(test_pattern: str) -> str:

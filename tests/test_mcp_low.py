@@ -82,6 +82,13 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(code.startswith("package"))
 
+    async def test_decompile_class_gradle(self):
+        config["buildTool"] = "gradlew"
+        # path to maven project required
+        config["projectFolder"] = testConfig.get("gradleProjectPath")
+        code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
+        self.assertTrue(code.startswith("package"))
+
     @patch('utils.web.get_http_client')
     async def test_http_get_request_success(self, mock_get_client):
         mock_client = AsyncMock()

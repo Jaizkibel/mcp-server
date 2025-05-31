@@ -52,6 +52,27 @@ database:
 browserCommand: firefox
 ```
 
+### Gradle Setup
+
+To make use the `decompile_java_class`tool in Gradle project, you need to add this task to `build.gradle`
+
+```gradle
+tasks.register('listClassesInDeps')  {
+    doLast {
+        configurations.compileClasspath.resolve().each { file ->
+            if (file.name.endsWith('.jar')) {
+                println file.absolutePath
+            }
+        }
+        configurations.runtimeClasspath.resolve().each { file ->
+            if (file.name.endsWith('.jar')) {
+                println file.absolutePath
+            }
+        }
+    }
+}
+```
+
 ## Usage
 
 Run the MCP server with:
