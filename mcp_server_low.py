@@ -512,8 +512,10 @@ async def decompile_java_class(class_name: str) -> str:
             return f"Error: Decompile command failed: {result.stderr}"
         
         # Filter out logging output from the result
+        # there is logging output in the decompiler output. 
+        # remove it
         lines = result.stdout.split("\n")
-        source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d{3} (INFO|WARN)', l)]
+        source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d+ (INFO|WARN)', l)]
         return '\n'.join(source_lines)
     else:
         return f"Error: Build tool '{build_tool}' not yet implemented. Only Maven (mvn/mvnw) is supported."
