@@ -17,6 +17,10 @@ import requests
 from httpx import Response
 from pathlib import Path
 
+local_dir = os.path.dirname(os.path.abspath(__file__))
+
+testConfig = {}
+
 class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
@@ -25,12 +29,18 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         try:
             with open(configPath, "r") as file:
                 config.update(yaml.safe_load(file))
-            print("Successfully loaded config for testing")
             if config.get("projectFolder") == None:
                 # set to location of this file
-                config["projectFolder"] = os.path.dirname(os.path.abspath(__file__))
+                config["projectFolder"] = local_dir
         except Exception as e:
-            print(f"Failed to load config: {e}")
+            print(f"Failed to load mcp server config: {e}")
+        """Load test config file before any tests run."""
+        try:
+
+            with open(os.path.join(local_dir,"config.yaml"), "r") as file:
+                testConfig.update(yaml.safe_load(file))
+        except Exception as e:
+            print(f"Failed to load test config: {e}")
 
     async def test_list_tools(self):
         config["buildTool"] = "Maven"
@@ -68,7 +78,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     async def test_decompile_class_maven(self):
         config["buildTool"] = "mvn"
         # path to maven project required
-        config["projectFolder"] = "/Users/ANNO.KRUESEMANN/IdeaProjects/github/cp-postbox-service"
+        config["projectFolder"] = testConfig.get("mavenProjectPath")
         code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(code.startswith("package"))
 
