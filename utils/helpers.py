@@ -1,7 +1,10 @@
 import logging
 import os
+from pathlib import Path
+import re
 from subprocess import CompletedProcess
 import subprocess
+import zipfile
 
 logger = logging.getLogger(__name__)
 
@@ -75,3 +78,51 @@ def get_gradle_jars(build_tool: str, workspace_path: str):
     # find line containing ".jar"
     classpath_lines = [l for l in lines if ".jar" in l]
     return classpath_lines
+
+def decompile_from_jars(class_name: str, jar_paths: list, root_path: Path) -> str:
+    """
+    Decompiles a Java class from JAR files.
+    
+    Args:
+        class_name: The full class name (e.g., 'com.example.MyClass')
+        jar_paths: List of JAR file paths to search in
+        root_path: Root path where the decompiler JAR is located
+        
+    Returns:
+        The decompiled source code or an error message
+    """
+    # Find first JAR containing the specified class
+    class_file = class_name.replace('.', '/') + '.class'
+    matching_jar: str = None
+    for jar in jar_paths:
+        try:
+            with zipfile.ZipFile(jar, 'r') as zip_ref:
+                if class_file in zip_ref.namelist():
+                    matching_jar = jar
+                    break
+        except Exception as e:
+            logger.error(f"Error checking JAR {jar}: {e}")
+    
+    if matching_jar is None:
+        return "Error: class not found"
+
+    decompiler_jar = root_path / "bin" / "jd-cli.jar"
+    decompile_command = ["java", "-jar", str(decompiler_jar), "--outputConsole",
+                            "--pattern", class_name, matching_jar]  # Remove quotes around class_name
+    logger.info(f"Executing '{' '.join(decompile_command)}'")
+    result = subprocess.run(
+        decompile_command,
+        cwd=root_path,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        logger.error(f"Java decompile command failed: {result.stderr}")
+        return f"Error: Decompile command failed: {result.stderr}"
+    
+    # Filter out logging output from the result
+    # there is logging output in the decompiler output. 
+    # remove it
+    lines = result.stdout.split("\n")
+    source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d+ (INFO|WARN)', l)]
+    return '\n'.join(source_lines)

@@ -2,12 +2,10 @@ from contextlib import asynccontextmanager
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import asyncio
 from typing import AsyncIterator
-import zipfile
 
 import mcp.server.stdio
 import mcp.types as types
@@ -17,7 +15,7 @@ import logging
 
 import yaml
 
-from utils.helpers import get_gradle_jars, handle_cmd_result, init_logging, get_maven_jars
+from utils.helpers import get_gradle_jars, handle_cmd_result, init_logging, get_maven_jars, decompile_from_jars
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
 from utils.mcp import get_project_folder, is_relative_path, to_text_context
@@ -457,41 +455,7 @@ async def decompile_java_class(class_name: str) -> str:
     else:
         return f"Error: Build tool {build_tool} is not supported"        
 
-    # Find first JAR containing the specified class
-    class_file = class_name.replace('.', '/') + '.class'
-    matching_jar: str = None
-    for jar in jar_paths:
-        try:
-            with zipfile.ZipFile(jar, 'r') as zip_ref:
-                if class_file in zip_ref.namelist():
-                    matching_jar = jar
-                    break
-        except Exception as e:
-            logger.error(f"Error checking JAR {jar}: {e}")
-    
-    if matching_jar is None:
-        return "Error: class not found"
-
-    decompiler_jar = rootPath / "bin" / "jd-cli.jar"
-    decompile_command = ["java", "-jar", str(decompiler_jar), "--outputConsole",
-                            "--pattern", class_name, matching_jar]  # Remove quotes around class_name
-    logger.info(f"Executing '{' '.join(decompile_command)}'")
-    result = subprocess.run(
-        decompile_command,
-        cwd=rootPath,
-        text=True,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        logger.error(f"Java decompile command failed: {result.stderr}")
-        return f"Error: Decompile command failed: {result.stderr}"
-    
-    # Filter out logging output from the result
-    # there is logging output in the decompiler output. 
-    # remove it
-    lines = result.stdout.split("\n")
-    source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d+ (INFO|WARN)', l)]
-    return '\n'.join(source_lines)
+    return decompile_from_jars(class_name, jar_paths, rootPath)
 
 
 async def run_maven_tests(test_pattern: str) -> str:

@@ -59,6 +59,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         result = await execute_sql_query(db_name, "SELECT 1.23456789 as result")
         self.assertEqual(result, "[{\"result\": 1.23456789}]")
 
+    @unittest.skip("Browser test disabled - requires manual interaction")
     async def test_open_in_browser(self):
         result = await open_in_browser("test_page.html")
         self.assertTrue(result == "Browser successfully opened")
