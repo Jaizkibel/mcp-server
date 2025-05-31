@@ -15,7 +15,13 @@ import logging
 
 import yaml
 
-from utils.helpers import get_gradle_jars, handle_cmd_result, init_logging, get_maven_jars, decompile_from_jars
+from utils.helpers import (
+    get_gradle_jars,
+    handle_cmd_result,
+    init_logging,
+    get_maven_jars,
+    decompile_from_jars,
+)
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
 from utils.mcp import get_project_folder, is_relative_path, to_text_context
@@ -125,37 +131,43 @@ async def list_tools() -> list[types.Tool]:
     ]
     if config.get("buildTool") is not None:
         logger.debug("Adding build related tools")
-        build_tools = [
-            types.Tool(
-                name="run_maven_tests",
-                description="Runs Maven tests. Executes 'mvn test -q -Dtest=<test_pattern> surefire-report:report'",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "test_pattern": {
-                            "type": "string",
-                            "description": "The pattern matching test files to execute",
-                        }
+        if "mvn" in config["buildTool"]:
+            tools.append(
+                types.Tool(
+                    name="run_maven_tests",
+                    description="Runs Maven tests. Executes 'mvn test -q -Dtest=<test_pattern> surefire-report:report'",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "test_pattern": {
+                                "type": "string",
+                                "description": "The pattern matching test files to execute",
+                            }
+                        },
+                        "required": ["test_pattern"],
                     },
-                    "required": ["test_pattern"],
-                },
-                annotations={"readOnlyHint": True, "openWorldHint": False},
-            ),
-            types.Tool(
-                name="run_gradle_tests",
-                description="Runs Gradle tests. Executes 'gradlew test -tests <test_pattern>'",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "test_pattern": {
-                            "type": "string",
-                            "description": "The pattern matching test files to execute",
-                        }
+                    annotations={"readOnlyHint": True, "openWorldHint": False},
+                )
+            )
+        if "gradle" in config["buildTool"]:
+            tools.append(
+                types.Tool(
+                    name="run_gradle_tests",
+                    description="Runs Gradle tests. Executes 'gradlew test -tests <test_pattern>'",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "test_pattern": {
+                                "type": "string",
+                                "description": "The pattern matching test files to execute",
+                            }
+                        },
+                        "required": ["test_pattern"],
                     },
-                    "required": ["test_pattern"],
-                },
-                annotations={"readOnlyHint": True, "openWorldHint": False},
-            ),
+                    annotations={"readOnlyHint": True, "openWorldHint": False},
+                )
+            )
+        tools.append(
             types.Tool(
                 name="decompile_java_class",
                 description="Decompiles a Java class and returns the source code of that class. Does not work with classes from Java standard libraries.",
@@ -170,9 +182,8 @@ async def list_tools() -> list[types.Tool]:
                     "required": ["class_name"],
                 },
                 annotations={"readOnlyHint": True, "openWorldHint": False},
-            ),
-        ]
-        tools.extend(build_tools)
+            )
+        )
 
     logger.debug(f"Collected {len(tools)} tools")
     return tools
@@ -184,7 +195,7 @@ async def handle_tool_call(
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
     """handles all tool calls!!!"""
 
-    try: 
+    try:
         logger.debug(f"handling tool '{name}' with args {arguments}")
         response = f"Error: Tool '{name}' not found"
         if name == "web_search":
@@ -225,7 +236,7 @@ async def handle_tool_call(
             if class_name == None:
                 raise ValueError("Parameter 'class_name' is missing")
             response = await decompile_java_class(class_name)
-    except Exception as e: 
+    except Exception as e:
         logger.error(f"Error handling tool call '{name}': {arguments}", exc_info=True)
         response = json.dumps({"error": f"Error handling tool call '{name}': {str(e)}"})
     finally:
@@ -447,13 +458,13 @@ async def decompile_java_class(class_name: str) -> str:
     if not workspace_path:
         logger.error("Workspace path is not set in the configuration.")
         return "Error: Workspace path is not set in the configuration."
-    
+
     if "mvn" in build_tool:
         jar_paths = get_maven_jars(build_tool, workspace_path)
-    elif "gradle" in build_tool:        
+    elif "gradle" in build_tool:
         jar_paths = get_gradle_jars(build_tool, workspace_path)
     else:
-        return f"Error: Build tool {build_tool} is not supported"        
+        return f"Error: Build tool {build_tool} is not supported"
 
     return decompile_from_jars(class_name, jar_paths, rootPath)
 

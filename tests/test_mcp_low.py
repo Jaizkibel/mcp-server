@@ -43,10 +43,10 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             print(f"Failed to load test config: {e}")
 
     async def test_list_tools(self):
-        config["buildTool"] = "Maven"
+        config["buildTool"] = "mvn"
 
         tools = await list_tools()
-        self.assertEqual(len(tools), 7)
+        self.assertEqual(len(tools), 6)
 
     async def test_postgres_sql_query(self):
         db_name = 'musiciandb'
