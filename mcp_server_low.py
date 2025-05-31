@@ -441,16 +441,15 @@ async def run_gradle_tests(test_pattern: str) -> str:
 async def decompile_java_class(class_name: str) -> str:
     """Decompiles a Java class and returns the source code."""
 
-    build_tool = config.get("buildTool")
+    build_tool: str = config.get("buildTool")
     if build_tool is None:
         return "Error: Build tool not defined."
 
-    if build_tool in ("mvn", "mvnw"):
-        workspace_path = await get_project_folder(server, config)
-        if not workspace_path:
-            logger.error("Workspace path is not set in the configuration.")
-            return "Error: Workspace path is not set in the configuration."
-        
+    workspace_path = await get_project_folder(server, config)
+    if not workspace_path:
+        logger.error("Workspace path is not set in the configuration.")
+        return "Error: Workspace path is not set in the configuration."
+    if "mvn" in build_tool:
         mvn_command = [build_tool, "dependency:build-classpath"]
         logger.info(f"Executing '{' '.join(mvn_command)}'")
         result = subprocess.run(
