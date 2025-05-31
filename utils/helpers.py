@@ -79,6 +79,21 @@ def get_gradle_jars(build_tool: str, workspace_path: str):
     classpath_lines = [l for l in lines if ".jar" in l]
     return classpath_lines
 
+def find_jar_for_class(class_name: str, jar_paths: list) -> str:
+    """Find first JAR containing the specified class"""
+    class_file = class_name.replace('.', '/') + '.class'
+    matching_jar: str = None
+    for jar in jar_paths:
+        try:
+            with zipfile.ZipFile(jar, 'r') as zip_ref:
+                if class_file in zip_ref.namelist():
+                    matching_jar = jar
+                    break
+        except Exception as e:
+            logger.error(f"Error checking JAR {jar}: {e}")
+            return None
+    return matching_jar
+
 def decompile_from_jars(class_name: str, jar_paths: list, root_path: Path) -> str:
     """
     Decompiles a Java class from JAR files.
@@ -91,18 +106,7 @@ def decompile_from_jars(class_name: str, jar_paths: list, root_path: Path) -> st
     Returns:
         The decompiled source code or an error message
     """
-    # Find first JAR containing the specified class
-    class_file = class_name.replace('.', '/') + '.class'
-    matching_jar: str = None
-    for jar in jar_paths:
-        try:
-            with zipfile.ZipFile(jar, 'r') as zip_ref:
-                if class_file in zip_ref.namelist():
-                    matching_jar = jar
-                    break
-        except Exception as e:
-            logger.error(f"Error checking JAR {jar}: {e}")
-    
+    matching_jar = find_jar_for_class(class_name, jar_paths)
     if matching_jar is None:
         return "Error: class not found"
 

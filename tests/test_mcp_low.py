@@ -6,6 +6,7 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from mcp_server_low import (
     decompile_java_class,
     execute_sql_query,
+    get_javadoc,
     http_get_request,
     config,
     list_tools,
@@ -82,6 +83,13 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         config["projectFolder"] = testConfig.get("mavenProjectPath")
         code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(code.startswith("package"))
+
+    async def test_javadoc_maven(self):
+        config["buildTool"] = "mvn"
+        # path to maven project required
+        config["projectFolder"] = testConfig.get("mavenProjectPath")
+        html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
+        self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
     async def test_decompile_class_gradle(self):
         config["buildTool"] = "gradlew"

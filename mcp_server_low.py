@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import json
 import os
+import zipfile
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,6 +17,7 @@ import logging
 import yaml
 
 from utils.helpers import (
+    find_jar_for_class,
     get_gradle_jars,
     handle_cmd_result,
     init_logging,
@@ -184,6 +186,23 @@ async def list_tools() -> list[types.Tool]:
                 annotations={"readOnlyHint": True, "openWorldHint": False},
             )
         )
+        tools.append(
+            types.Tool(
+                name="get_javadoc",
+                description="Gets Javadoc for a class. Does not work with classes from Java standard libraries.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "class_name": {
+                            "type": "string",
+                            "description": "The full class name. Example: 'java.util.List'",
+                        }
+                    },
+                    "required": ["class_name"],
+                },
+                annotations={"readOnlyHint": True, "openWorldHint": False},
+            )
+        )
 
     logger.debug(f"Collected {len(tools)} tools")
     return tools
@@ -236,6 +255,11 @@ async def handle_tool_call(
             if class_name == None:
                 raise ValueError("Parameter 'class_name' is missing")
             response = await decompile_java_class(class_name)
+        if name == "get_javadoc":
+            class_name = arguments.get("class_name")
+            if class_name == None:
+                raise ValueError("Parameter 'class_name' is missing")
+            response = await get_javadoc(class_name)
     except Exception as e:
         logger.error(f"Error handling tool call '{name}': {arguments}", exc_info=True)
         response = json.dumps({"error": f"Error handling tool call '{name}': {str(e)}"})
@@ -467,6 +491,56 @@ async def decompile_java_class(class_name: str) -> str:
         return f"Error: Build tool {build_tool} is not supported"
 
     return decompile_from_jars(class_name, jar_paths, rootPath)
+
+async def get_javadoc(class_name: str) -> str:
+    """Gets Javadoc for class.
+    
+    Works with downloaded Javadoc jars only.
+    Use 'mvn dependency:resolve -Dclassifier=javadoc' to download them.
+    """
+
+    build_tool: str = config.get("buildTool")
+    if build_tool is None:
+        return "Error: Build tool not defined."
+
+    workspace_path = await get_project_folder(server, config)
+    if not workspace_path:
+        logger.error("Workspace path is not set in the configuration.")
+        return "Error: Workspace path is not set in the configuration."
+
+    if "mvn" in build_tool:
+        jar_paths = get_maven_jars(build_tool, workspace_path)
+    # elif "gradle" in build_tool:
+        # jar_paths = get_gradle_jars(build_tool, workspace_path)
+    else:
+        return f"Error: Build tool {build_tool} is not supported"
+
+    jar_path = find_jar_for_class(class_name, jar_paths)
+    # if Javadoc file exists, it is in the same folder as lib jar, but ending with -javadoc.jar
+    javadoc_path = jar_path.replace(".jar", "-javadoc.jar")
+
+    if not os.path.exists(javadoc_path):
+        return f"Error: Javadoc file not found at {javadoc_path}"
+
+    # Convert class name to path (com.example.MyClass → com/example/MyClass.html)
+    class_file = class_name.replace('.', '/') + '.html'
+    try:
+        with zipfile.ZipFile(javadoc_path, 'r') as zip_ref:
+            name_list = zip_ref.namelist()
+            # first entry of name_list, that ends with class_file
+            class_file_path = next(
+                (name for name in name_list if name.endswith(class_file)), None
+            )
+            if class_file_path is None:
+                logger.error(f"Error: File {class_file} not found in Javadoc {javadoc_path}")
+                return f"Error: Class {class_name} not found in Javadoc"
+                
+            with zip_ref.open(class_file_path) as f:
+                content = f.read().decode('utf-8')
+                return content
+    except Exception as e:
+        logger.error(f"Error extracting Javadoc: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
 
 
 async def run_maven_tests(test_pattern: str) -> str:
