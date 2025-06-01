@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 import json
 import os
+import re
+import zipfile
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,7 +17,15 @@ import logging
 
 import yaml
 
-from utils.helpers import handle_cmd_result, init_logging
+from utils.helpers import (
+    find_file_in_folder,
+    find_jar_for_class,
+    get_gradle_jars,
+    handle_cmd_result,
+    init_logging,
+    get_maven_jars,
+    decompile_from_jars,
+)
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
 from utils.mcp import get_project_folder, is_relative_path, to_text_context
@@ -33,7 +43,8 @@ init_logging("log", "mcp_server.log")
 
 logger = logging.getLogger(__name__)
 
-configPath = f"{Path.home()}/.mcp-server/config.yml"
+rootPath: Path = Path(__file__).parent
+configPath: str = f"{Path.home()}/.mcp-server/config.yml"
 config = {}
 
 
@@ -85,7 +96,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="execute_sql_query",
-            description="Executes a read-only SQL query on a PostgreSQL database and returns the result as JSON.",
+            description="Executes a read-only SQL query on a PostgreSQL or SqlServer database and returns the result as JSON.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -122,39 +133,45 @@ async def list_tools() -> list[types.Tool]:
             annotations={"readOnlyHint": True, "openWorldHint": True},
         ),
     ]
-    if config.get("buildTool") in ("Maven", "Gradle"):
+    if config.get("buildTool") is not None:
         logger.debug("Adding build related tools")
-        build_tools = [
-            types.Tool(
-                name="run_maven_tests",
-                description="Runs Maven tests. Executes 'mvn test -q -Dtest=<test_pattern> surefire-report:report'",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "test_pattern": {
-                            "type": "string",
-                            "description": "The pattern matching test files to execute",
-                        }
+        if "mvn" in config["buildTool"]:
+            tools.append(
+                types.Tool(
+                    name="run_maven_tests",
+                    description="Runs Maven tests. Executes 'mvn test -q -Dtest=<test_pattern> surefire-report:report'",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "test_pattern": {
+                                "type": "string",
+                                "description": "The pattern matching test files to execute",
+                            }
+                        },
+                        "required": ["test_pattern"],
                     },
-                    "required": ["test_pattern"],
-                },
-                annotations={"readOnlyHint": True, "openWorldHint": False},
-            ),
-            types.Tool(
-                name="run_gradle_tests",
-                description="Runs Gradle tests. Executes 'gradlew test -tests <test_pattern>'",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "test_pattern": {
-                            "type": "string",
-                            "description": "The pattern matching test files to execute",
-                        }
+                    annotations={"readOnlyHint": True, "openWorldHint": False},
+                )
+            )
+        if "gradle" in config["buildTool"]:
+            tools.append(
+                types.Tool(
+                    name="run_gradle_tests",
+                    description="Runs Gradle tests. Executes 'gradlew test -tests <test_pattern>'",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "test_pattern": {
+                                "type": "string",
+                                "description": "The pattern matching test files to execute",
+                            }
+                        },
+                        "required": ["test_pattern"],
                     },
-                    "required": ["test_pattern"],
-                },
-                annotations={"readOnlyHint": True, "openWorldHint": False},
-            ),
+                    annotations={"readOnlyHint": True, "openWorldHint": False},
+                )
+            )
+        tools.append(
             types.Tool(
                 name="decompile_java_class",
                 description="Decompiles a Java class and returns the source code of that class. Does not work with classes from Java standard libraries.",
@@ -169,9 +186,25 @@ async def list_tools() -> list[types.Tool]:
                     "required": ["class_name"],
                 },
                 annotations={"readOnlyHint": True, "openWorldHint": False},
-            ),
-        ]
-        tools.extend(build_tools)
+            )
+        )
+        tools.append(
+            types.Tool(
+                name="get_javadoc",
+                description="Gets Javadoc for a class. Does not work with classes from Java standard libraries.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "class_name": {
+                            "type": "string",
+                            "description": "The full class name. Example: 'java.util.List'",
+                        }
+                    },
+                    "required": ["class_name"],
+                },
+                annotations={"readOnlyHint": True, "openWorldHint": False},
+            )
+        )
 
     logger.debug(f"Collected {len(tools)} tools")
     return tools
@@ -183,47 +216,57 @@ async def handle_tool_call(
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
     """handles all tool calls!!!"""
 
-    response = f"Error: Tool {name} not found"
-    if name == "web_search":
-        query = arguments["query"]
-        if query == None:
-            ValueError("Parameter 'query' is missing")
-        response = await web_search(query)
-    if name == "open_in_browser":
-        url = arguments["url"]
-        if url == None:
-            ValueError("Parameter 'url' is missing")
-        response = await open_in_browser(url)
-    if name == "execute_sql_query":
-        dbname = arguments["dbname"]
-        if dbname == None:
-            ValueError("Parameter 'dbname' is missing")
-        query = arguments["query"]
-        if query == None:
-            ValueError("Parameter 'query' is missing")
-        response = await execute_sql_query(dbname, query)
-    if name == "http_get_request":
-        url = arguments["url"]
-        if url == None:
-            ValueError("Parameter 'url' is missing")
-        response = await http_get_request(url, arguments["headers"])
-    if name == "run_maven_tests":
-        class_name = arguments["test_pattern"]
-        if class_name == None:
-            ValueError("Parameter 'test_pattern' is missing")
-        response = await run_tests("mvn", class_name)
-    if name == "run_gradle_tests":
-        class_name = arguments["test_pattern"]
-        if class_name == None:
-            ValueError("Parameter 'test_pattern' is missing")
-        response = await run_tests("gradlew", class_name)
-    if name == "decompile_java_class":
-        class_name = arguments["class_name"]
-        if class_name == None:
-            ValueError("Parameter 'class_name' is missing")
-        response = await decompile_java_class(class_name)
-
-    return to_text_context(response)
+    try:
+        logger.debug(f"handling tool '{name}' with args {arguments}")
+        response = f"Error: Tool '{name}' not found"
+        if name == "web_search":
+            query = arguments.get("query")
+            if query == None:
+                raise ValueError("Parameter 'query' is missing")
+            response = await web_search(query)
+        if name == "open_in_browser":
+            url = arguments.get("url")
+            if url == None:
+                raise ValueError("Parameter 'url' is missing")
+            response = await open_in_browser(url)
+        if name == "execute_sql_query":
+            dbname = arguments.get("dbname")
+            if dbname == None:
+                raise ValueError("Parameter 'dbname' is missing")
+            query = arguments.get("query")
+            if query == None:
+                raise ValueError("Parameter 'query' is missing")
+            response = await execute_sql_query(dbname, query)
+        if name == "http_get_request":
+            url = arguments.get("url")
+            if url == None:
+                raise ValueError("Parameter 'url' is missing")
+            response = await http_get_request(url, arguments.get("headers"))
+        if name == "run_maven_tests":
+            class_name = arguments.get("test_pattern")
+            if class_name == None:
+                raise ValueError("Parameter 'test_pattern' is missing")
+            response = await run_tests("mvn", class_name)
+        if name == "run_gradle_tests":
+            class_name = arguments.get("test_pattern")
+            if class_name == None:
+                raise ValueError("Parameter 'test_pattern' is missing")
+            response = await run_tests("gradlew", class_name)
+        if name == "decompile_java_class":
+            class_name = arguments.get("class_name")
+            if class_name == None:
+                raise ValueError("Parameter 'class_name' is missing")
+            response = await decompile_java_class(class_name)
+        if name == "get_javadoc":
+            class_name = arguments.get("class_name")
+            if class_name == None:
+                raise ValueError("Parameter 'class_name' is missing")
+            response = await get_javadoc(class_name)
+    except Exception as e:
+        logger.error(f"Error handling tool call '{name}': {arguments}", exc_info=True)
+        response = json.dumps({"error": f"Error handling tool call '{name}': {str(e)}"})
+    finally:
+        return to_text_context(response)
 
 
 async def execute_sql_query(dbname: str, query: str) -> str:
@@ -407,7 +450,7 @@ async def open_in_browser(url: str) -> str:
 
     try:
         # Execute command to open browser
-        # Popen returns immediatly after executing command
+        # Popen returns immediately after executing command
         subprocess.Popen(
             [browser_command, url],
             stdout=subprocess.DEVNULL,
@@ -432,21 +475,87 @@ async def run_gradle_tests(test_pattern: str) -> str:
 
 async def decompile_java_class(class_name: str) -> str:
     """Decompiles a Java class and returns the source code."""
-    # workspace_path = await get_project_folder(server, config)
-    workspace_path = "/home/kruese/IdeaProjects/github/boot-demo"
+
+    build_tool: str = config.get("buildTool")
+    if build_tool is None:
+        return "Error: Build tool not defined."
+
+    workspace_path = await get_project_folder(server, config)
     if not workspace_path:
         logger.error("Workspace path is not set in the configuration.")
         return "Error: Workspace path is not set in the configuration."
 
-    command = ["./bin/gradle-decompile.sh", workspace_path, class_name]
-    logger.info(f"Executing '${' '.join(command)}'")
-    result = subprocess.run(
-        command,
-        # cwd=workspace_path,
-        text=True,
-        capture_output=True,
-    )
-    return handle_cmd_result(result)
+    if "mvn" in build_tool:
+        jar_paths = get_maven_jars(build_tool, workspace_path)
+    elif "gradle" in build_tool:
+        jar_paths = get_gradle_jars(build_tool, workspace_path)
+    else:
+        return f"Error: Build tool {build_tool} is not supported"
+
+    return decompile_from_jars(class_name, jar_paths, rootPath)
+
+async def get_javadoc(class_name: str) -> str:
+    """Gets Javadoc for class.
+    
+    Works with downloaded Javadoc jars only.
+    Use 'mvn dependency:resolve -Dclassifier=javadoc' to download them.
+    """
+
+    build_tool: str = config.get("buildTool")
+    if build_tool is None:
+        return "Error: Build tool not defined."
+
+    workspace_path = await get_project_folder(server, config)
+    if not workspace_path:
+        logger.error("Workspace path is not set in the configuration.")
+        return "Error: Workspace path is not set in the configuration."
+
+    if "mvn" in build_tool:
+        jar_paths = get_maven_jars(build_tool, workspace_path)
+    elif "gradle" in build_tool:
+        jar_paths = get_gradle_jars(build_tool, workspace_path)
+    else:
+        return f"Error: Build tool {build_tool} is not supported"
+
+    jar_path = find_jar_for_class(class_name, jar_paths)
+    if "mvn" in build_tool:
+        # Maven: if Javadoc file exists, it is in the same folder as lib jar, but ending with -javadoc.jar
+        javadoc_path = jar_path.replace(".jar", "-javadoc.jar")
+        if not os.path.exists(javadoc_path):
+            return f"Error: Javadoc file not found at {javadoc_path}"
+    else:
+        # Gradle: Javadoc file is in different folder with unknown hash as name
+        # Regex pattern to capture 3 groups from jar path
+        # Group 1: (.*) - Matches everything before the last folder (greedy match)
+        # Group 2: ([^\/]+) - Matches the last folder (not needed)
+        # Group 3: ([^\/]+) - Matches the file name
+        pattern = r"^(.*)\/([^\/]+)\/([^\/]+)$"
+        match = re.match(pattern, jar_path)
+        if match:
+            root_folder = match.group(1)
+            file_name = match.group(3)
+        javadoc_path = find_file_in_folder(root_folder, file_name.replace(".jar", "-javadoc.jar"))
+
+
+    # Convert class name to path (com.example.MyClass → com/example/MyClass.html)
+    class_file = class_name.replace('.', '/') + '.html'
+    try:
+        with zipfile.ZipFile(javadoc_path, 'r') as zip_ref:
+            name_list = zip_ref.namelist()
+            # first entry of name_list, that ends with class_file
+            class_file_path = next(
+                (name for name in name_list if name.endswith(class_file)), None
+            )
+            if class_file_path is None:
+                logger.error(f"Error: File {class_file} not found in Javadoc {javadoc_path}")
+                return f"Error: Class {class_name} not found in Javadoc"
+                
+            with zip_ref.open(class_file_path) as f:
+                content = f.read().decode('utf-8')
+                return content
+    except Exception as e:
+        logger.error(f"Error extracting Javadoc: {str(e)}", exc_info=True)
+        return f"Error: {str(e)}"
 
 
 async def run_maven_tests(test_pattern: str) -> str:

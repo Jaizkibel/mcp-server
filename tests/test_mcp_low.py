@@ -4,7 +4,9 @@ import yaml
 import os
 from unittest.mock import patch, AsyncMock, MagicMock
 from mcp_server_low import (
+    decompile_java_class,
     execute_sql_query,
+    get_javadoc,
     http_get_request,
     config,
     list_tools,
@@ -16,6 +18,10 @@ import requests
 from httpx import Response
 from pathlib import Path
 
+local_dir = os.path.dirname(os.path.abspath(__file__))
+
+testConfig = {}
+
 class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
@@ -24,15 +30,21 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         try:
             with open(configPath, "r") as file:
                 config.update(yaml.safe_load(file))
-            print("Successfully loaded config for testing")
             if config.get("projectFolder") == None:
                 # set to location of this file
-                config["projectFolder"] = os.path.dirname(os.path.abspath(__file__))
+                config["projectFolder"] = local_dir
         except Exception as e:
-            print(f"Failed to load config: {e}")
+            print(f"Failed to load mcp server config: {e}")
+        """Load test config file before any tests run."""
+        try:
+
+            with open(os.path.join(local_dir,"config.yaml"), "r") as file:
+                testConfig.update(yaml.safe_load(file))
+        except Exception as e:
+            print(f"Failed to load test config: {e}")
 
     async def test_list_tools(self):
-        config["buildTool"] = "Maven"
+        config["buildTool"] = "mvn"
 
         tools = await list_tools()
         self.assertEqual(len(tools), 7)
@@ -48,6 +60,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         result = await execute_sql_query(db_name, "SELECT 1.23456789 as result")
         self.assertEqual(result, "[{\"result\": 1.23456789}]")
 
+    @unittest.skip("Browser test disabled - requires manual interaction")
     async def test_open_in_browser(self):
         result = await open_in_browser("test_page.html")
         self.assertTrue(result == "Browser successfully opened")
@@ -63,6 +76,34 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("<strong>", finding["description"])
             self.assertIsNotNone(finding["content"])
             self.assertIn("gradle", finding["content"].lower())
+
+    async def test_decompile_class_maven(self):
+        config["buildTool"] = "mvn"
+        # path to maven project required
+        config["projectFolder"] = testConfig.get("mavenProjectPath")
+        code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
+        self.assertTrue(code.startswith("package"))
+
+    async def test_javadoc_maven(self):
+        config["buildTool"] = "mvn"
+        # path to maven project required
+        config["projectFolder"] = testConfig.get("mavenProjectPath")
+        html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
+        self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
+
+    async def test_javadoc_gradle(self):
+        config["buildTool"] = "gradlew"
+        # path to maven project required
+        config["projectFolder"] = testConfig.get("gradleProjectPath")
+        html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
+        self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
+
+    async def test_decompile_class_gradle(self):
+        config["buildTool"] = "gradlew"
+        # path to maven project required
+        config["projectFolder"] = testConfig.get("gradleProjectPath")
+        code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
+        self.assertTrue(code.startswith("package"))
 
     @patch('utils.web.get_http_client')
     async def test_http_get_request_success(self, mock_get_client):
