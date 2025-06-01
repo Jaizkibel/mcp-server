@@ -54,7 +54,7 @@ browserCommand: firefox
 
 ### Gradle Setup
 
-To make use the `decompile_java_class`tool in Gradle project, you need to add this task to `build.gradle`
+To make use the `get_source`tool in Gradle project, you need to add this task to `build.gradle`
 
 ```gradle
 tasks.register('listClassesInDeps')  {

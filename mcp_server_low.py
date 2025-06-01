@@ -173,7 +173,7 @@ async def list_tools() -> list[types.Tool]:
             )
         tools.append(
             types.Tool(
-                name="decompile_java_class",
+                name="get_source",
                 description="Decompiles a Java class and returns the source code of that class. Does not work with classes from Java standard libraries.",
                 inputSchema={
                     "type": "object",
@@ -252,11 +252,11 @@ async def handle_tool_call(
             if class_name == None:
                 raise ValueError("Parameter 'test_pattern' is missing")
             response = await run_tests("gradlew", class_name)
-        if name == "decompile_java_class":
+        if name == "get_source":
             class_name = arguments.get("class_name")
             if class_name == None:
                 raise ValueError("Parameter 'class_name' is missing")
-            response = await decompile_java_class(class_name)
+            response = await get_source(class_name)
         if name == "get_javadoc":
             class_name = arguments.get("class_name")
             if class_name == None:
@@ -473,7 +473,7 @@ async def run_gradle_tests(test_pattern: str) -> str:
     return await run_tests("gradlew", test_pattern)
 
 
-async def decompile_java_class(class_name: str) -> str:
+async def get_source(class_name: str) -> str:
     """Decompiles a Java class and returns the source code."""
 
     build_tool: str = config.get("buildTool")
