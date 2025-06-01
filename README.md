@@ -166,16 +166,20 @@ To share the MCP server configuration with your team:
 The MCP server provides the following tools for AI assistants:
 
 ### Database Operations
-- `execute_sql_query(query)`: Executes a read-only SQL query on a configured PostgreSQL database
+- `execute_sql_query(query)`: Executes a read-only SQL query on a configured PostgreSQL or SqlServer database
 
 ### Web Interaction
 - `web_search(query)`: Executes a search query using the Brave Search API and fetches content from top results
+- `open_in_browser(url)`: Opens a URL or file in the local browser
 - `http_get_request(url, headers)`: Makes an HTTP GET request to the specified URL
-- `http_post_request(url, body, headers)`: Makes an HTTP POST request to the specified URL
 
 ### Test Execution
 - `run_gradle_tests(test_pattern)`: Runs Gradle tests with the specified pattern
 - `run_maven_tests(test_pattern)`: Runs Maven tests with the specified pattern
+
+### Java Source Tools
+- `get_source(class_name)`: Returns the source of a Java class
+- `get_javadoc(class_name)`: Gets Javadoc for a Java class
 
 ## API
 
