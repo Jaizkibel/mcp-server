@@ -82,7 +82,8 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         # path to maven project required
         config["projectFolder"] = testConfig.get("mavenProjectPath")
         code = await get_source("com.zaxxer.hikari.HikariDataSource")
-        self.assertTrue(code.startswith("package"))
+        # original source starts with comment
+        self.assertTrue(code.startswith("/*\n"))
 
     async def test_javadoc_maven(self):
         config["buildTool"] = "mvn"
@@ -103,7 +104,8 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         # path to maven project required
         config["projectFolder"] = testConfig.get("gradleProjectPath")
         code = await get_source("com.zaxxer.hikari.HikariDataSource")
-        self.assertTrue(code.startswith("package"))
+        # original source starts with comment
+        self.assertTrue(code.startswith("/*\n"))
 
     @patch('utils.web.get_http_client')
     async def test_http_get_request_success(self, mock_get_client):

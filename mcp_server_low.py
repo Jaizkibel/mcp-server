@@ -1,8 +1,6 @@
 from contextlib import asynccontextmanager
 import json
 import os
-import re
-import zipfile
 from pathlib import Path
 import shutil
 import subprocess
@@ -18,13 +16,13 @@ import logging
 import yaml
 
 from utils.helpers import (
-    find_file_in_folder,
-    find_jar_for_class,
-    get_gradle_jars,
+    get_companion_path,
+    get_content_from_zip,
+    get_gradle_jar,
     handle_cmd_result,
     init_logging,
-    get_maven_jars,
-    decompile_from_jars,
+    get_maven_jar,
+    decompile_from_jar,
 )
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
@@ -35,7 +33,6 @@ from utils.web import (
     html_to_markdown,
     http_client_context,
     strip_strong_tags,
-    strip_text_from_html,
 )
 
 # Configure logging
@@ -174,7 +171,7 @@ async def list_tools() -> list[types.Tool]:
         tools.append(
             types.Tool(
                 name="get_source",
-                description="Decompiles a Java class and returns the source code of that class. Does not work with classes from Java standard libraries.",
+                description="Returns the source of a Java class. Does not work with classes from Java standard libraries.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -485,14 +482,31 @@ async def get_source(class_name: str) -> str:
         logger.error("Workspace path is not set in the configuration.")
         return "Error: Workspace path is not set in the configuration."
 
+    # search for lib jar containing the class
     if "mvn" in build_tool:
-        jar_paths = get_maven_jars(build_tool, workspace_path)
+        jar_path = get_maven_jar(build_tool, class_name, workspace_path)
     elif "gradle" in build_tool:
-        jar_paths = get_gradle_jars(build_tool, workspace_path)
+        jar_path = get_gradle_jar(build_tool, class_name, workspace_path)
     else:
         return f"Error: Build tool {build_tool} is not supported"
+    
+    if jar_path is None:
+        return f"Error: No source for class {class_name} found"
+    
+    # try source jar first, maybe it is downloaded
+    # to download all source jars, use 'mvn dependency:sources'
+    zip_path = get_companion_path(build_tool, jar_path, "sources")
+    if zip_path is not None:
+        # Convert class name to path (com.example.MyClass → com/example/MyClass.html)
+        java_file = class_name.replace('.', '/') + '.java'
+        content = get_content_from_zip(zip_path, java_file)
+        if content is None:
+            return f"Error: No doc file for {java_file} found in {zip_path}"
+        logger.info(f"Found Java source in sources jar {zip_path}")
+        return content
 
-    return decompile_from_jars(class_name, jar_paths, rootPath)
+    # fallback: decompile
+    return decompile_from_jar(class_name, jar_path, rootPath)
 
 async def get_javadoc(class_name: str) -> str:
     """Gets Javadoc for class.
@@ -511,51 +525,24 @@ async def get_javadoc(class_name: str) -> str:
         return "Error: Workspace path is not set in the configuration."
 
     if "mvn" in build_tool:
-        jar_paths = get_maven_jars(build_tool, workspace_path)
+        jar_path = get_maven_jar(build_tool, class_name, workspace_path)
     elif "gradle" in build_tool:
-        jar_paths = get_gradle_jars(build_tool, workspace_path)
+        jar_path = get_gradle_jar(build_tool, class_name, workspace_path)
     else:
         return f"Error: Build tool {build_tool} is not supported"
-
-    jar_path = find_jar_for_class(class_name, jar_paths)
-    if "mvn" in build_tool:
-        # Maven: if Javadoc file exists, it is in the same folder as lib jar, but ending with -javadoc.jar
-        javadoc_path = jar_path.replace(".jar", "-javadoc.jar")
-        if not os.path.exists(javadoc_path):
-            return f"Error: Javadoc file not found at {javadoc_path}"
-    else:
-        # Gradle: Javadoc file is in different folder with unknown hash as name
-        # Regex pattern to capture 3 groups from jar path
-        # Group 1: (.*) - Matches everything before the last folder (greedy match)
-        # Group 2: ([^\/]+) - Matches the last folder (not needed)
-        # Group 3: ([^\/]+) - Matches the file name
-        pattern = r"^(.*)\/([^\/]+)\/([^\/]+)$"
-        match = re.match(pattern, jar_path)
-        if match:
-            root_folder = match.group(1)
-            file_name = match.group(3)
-        javadoc_path = find_file_in_folder(root_folder, file_name.replace(".jar", "-javadoc.jar"))
-
+    
+    # lookup corresponding javadoc file (zipped)
+    zip_path = get_companion_path(build_tool, jar_path, "javadoc")
+    if zip_path is None:
+        return f"Error: No javadoc jar found for class {class_name}"
 
     # Convert class name to path (com.example.MyClass → com/example/MyClass.html)
-    class_file = class_name.replace('.', '/') + '.html'
-    try:
-        with zipfile.ZipFile(javadoc_path, 'r') as zip_ref:
-            name_list = zip_ref.namelist()
-            # first entry of name_list, that ends with class_file
-            class_file_path = next(
-                (name for name in name_list if name.endswith(class_file)), None
-            )
-            if class_file_path is None:
-                logger.error(f"Error: File {class_file} not found in Javadoc {javadoc_path}")
-                return f"Error: Class {class_name} not found in Javadoc"
-                
-            with zip_ref.open(class_file_path) as f:
-                content = f.read().decode('utf-8')
-                return content
-    except Exception as e:
-        logger.error(f"Error extracting Javadoc: {str(e)}", exc_info=True)
-        return f"Error: {str(e)}"
+    html_file = class_name.replace('.', '/') + '.html'
+    content = get_content_from_zip(zip_path, html_file)
+    if content is None:
+        return f"Error: No doc file for {html_file} found in {zip_path}"
+    
+    return content
 
 
 async def run_maven_tests(test_pattern: str) -> str:
