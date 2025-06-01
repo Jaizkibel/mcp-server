@@ -130,3 +130,22 @@ def decompile_from_jars(class_name: str, jar_paths: list, root_path: Path) -> st
     lines = result.stdout.split("\n")
     source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d+ (INFO|WARN)', l)]
     return '\n'.join(source_lines)
+
+def find_file_in_folder(root_dir: str, file_name: str) -> str:
+    """
+    Searches for files in a given folder
+    Args:
+        root_dir (str): The starting directory for the search.
+        file_name (str): The name of the file to search for
+
+    Returns:
+        list: A list of full paths of files that match the regex pattern.
+    """
+    # Compile the regex for efficiency
+    compiled_regex = re.compile(f"^{file_name}$")
+
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        for filename in filenames:
+            if compiled_regex.search(filename):
+                return os.path.join(dirpath, filename)
+    return None

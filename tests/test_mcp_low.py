@@ -47,7 +47,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         config["buildTool"] = "mvn"
 
         tools = await list_tools()
-        self.assertEqual(len(tools), 6)
+        self.assertEqual(len(tools), 7)
 
     async def test_postgres_sql_query(self):
         db_name = 'musiciandb'
@@ -88,6 +88,13 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         config["buildTool"] = "mvn"
         # path to maven project required
         config["projectFolder"] = testConfig.get("mavenProjectPath")
+        html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
+        self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
+
+    async def test_javadoc_gradle(self):
+        config["buildTool"] = "gradlew"
+        # path to maven project required
+        config["projectFolder"] = testConfig.get("gradleProjectPath")
         html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 

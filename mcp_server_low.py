@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import json
 import os
+import re
 import zipfile
 from pathlib import Path
 import shutil
@@ -17,6 +18,7 @@ import logging
 import yaml
 
 from utils.helpers import (
+    find_file_in_folder,
     find_jar_for_class,
     get_gradle_jars,
     handle_cmd_result,
@@ -510,17 +512,30 @@ async def get_javadoc(class_name: str) -> str:
 
     if "mvn" in build_tool:
         jar_paths = get_maven_jars(build_tool, workspace_path)
-    # elif "gradle" in build_tool:
-        # jar_paths = get_gradle_jars(build_tool, workspace_path)
+    elif "gradle" in build_tool:
+        jar_paths = get_gradle_jars(build_tool, workspace_path)
     else:
         return f"Error: Build tool {build_tool} is not supported"
 
     jar_path = find_jar_for_class(class_name, jar_paths)
-    # if Javadoc file exists, it is in the same folder as lib jar, but ending with -javadoc.jar
-    javadoc_path = jar_path.replace(".jar", "-javadoc.jar")
+    if "mvn" in build_tool:
+        # Maven: if Javadoc file exists, it is in the same folder as lib jar, but ending with -javadoc.jar
+        javadoc_path = jar_path.replace(".jar", "-javadoc.jar")
+        if not os.path.exists(javadoc_path):
+            return f"Error: Javadoc file not found at {javadoc_path}"
+    else:
+        # Gradle: Javadoc file is in different folder with unknown hash as name
+        # Regex pattern to capture 3 groups from jar path
+        # Group 1: (.*) - Matches everything before the last folder (greedy match)
+        # Group 2: ([^\/]+) - Matches the last folder (not needed)
+        # Group 3: ([^\/]+) - Matches the file name
+        pattern = r"^(.*)\/([^\/]+)\/([^\/]+)$"
+        match = re.match(pattern, jar_path)
+        if match:
+            root_folder = match.group(1)
+            file_name = match.group(3)
+        javadoc_path = find_file_in_folder(root_folder, file_name.replace(".jar", "-javadoc.jar"))
 
-    if not os.path.exists(javadoc_path):
-        return f"Error: Javadoc file not found at {javadoc_path}"
 
     # Convert class name to path (com.example.MyClass → com/example/MyClass.html)
     class_file = class_name.replace('.', '/') + '.html'
