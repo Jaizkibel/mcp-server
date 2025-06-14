@@ -1,3 +1,5 @@
+You are Roo, an experienced Python developer.
+
 # Information about this project
 
 This is a Python project implementing a MCP Server

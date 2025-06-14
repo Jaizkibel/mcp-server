@@ -4,7 +4,7 @@ import yaml
 import os
 from unittest.mock import patch, AsyncMock, MagicMock
 from mcp_server_low import (
-    decompile_java_class,
+    get_source,
     execute_sql_query,
     get_javadoc,
     http_get_request,
@@ -66,23 +66,25 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result == "Browser successfully opened")
 
     async def test_web_query(self):
-        findings_text = await web_search("latest gradle version")
+        findings_text = await web_search("latest python version")
         findings = json.loads(findings_text)
         self.assertIsNotNone(findings)
         self.assertEqual(len(findings), 3)
         for finding in findings:
+            self.assertIsNone(finding.get("error"))
             self.assertIsNotNone(finding["url"])
             self.assertIsNotNone(finding["description"])
             self.assertNotIn("<strong>", finding["description"])
             self.assertIsNotNone(finding["content"])
-            self.assertIn("gradle", finding["content"].lower())
+            self.assertIn("python", finding["content"].lower())
 
-    async def test_decompile_class_maven(self):
+    async def test_source_maven(self):
         config["buildTool"] = "mvn"
         # path to maven project required
         config["projectFolder"] = testConfig.get("mavenProjectPath")
-        code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
-        self.assertTrue(code.startswith("package"))
+        code = await get_source("com.zaxxer.hikari.HikariDataSource")
+        # original source starts with comment
+        self.assertTrue(code.startswith("/*\n"))
 
     async def test_javadoc_maven(self):
         config["buildTool"] = "mvn"
@@ -98,12 +100,13 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
-    async def test_decompile_class_gradle(self):
+    async def test_source_gradle(self):
         config["buildTool"] = "gradlew"
         # path to maven project required
         config["projectFolder"] = testConfig.get("gradleProjectPath")
-        code = await decompile_java_class("com.zaxxer.hikari.HikariDataSource")
-        self.assertTrue(code.startswith("package"))
+        code = await get_source("com.zaxxer.hikari.HikariDataSource")
+        # original source starts with comment
+        self.assertTrue(code.startswith("/*\n"))
 
     @patch('utils.web.get_http_client')
     async def test_http_get_request_success(self, mock_get_client):
