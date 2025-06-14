@@ -33,6 +33,7 @@ from utils.web import (
     html_to_markdown,
     http_client_context,
     strip_strong_tags,
+    strip_text_from_html,
 )
 
 # Configure logging
@@ -207,63 +208,88 @@ async def list_tools() -> list[types.Tool]:
     return tools
 
 
+# Tool registry with configuration for each tool
+TOOL_REGISTRY = {
+    "web_search": {
+        "handler": lambda args: web_search(args["query"]),
+        "required_params": ["query"]
+    },
+    "open_in_browser": {
+        "handler": lambda args: open_in_browser(args["url"]),
+        "required_params": ["url"]
+    },
+    "execute_sql_query": {
+        "handler": lambda args: execute_sql_query(args["dbname"], args["query"]),
+        "required_params": ["dbname", "query"]
+    },
+    "http_get_request": {
+        "handler": lambda args: http_get_request(args["url"], args.get("headers")),
+        "required_params": ["url"]
+    },
+    "run_maven_tests": {
+        "handler": lambda args: run_tests("mvn", args["test_pattern"]),
+        "required_params": ["test_pattern"]
+    },
+    "run_gradle_tests": {
+        "handler": lambda args: run_tests("gradlew", args["test_pattern"]),
+        "required_params": ["test_pattern"]
+    },
+    "get_source": {
+        "handler": lambda args: get_source(args["class_name"]),
+        "required_params": ["class_name"]
+    },
+    "get_javadoc": {
+        "handler": lambda args: get_javadoc(args["class_name"]),
+        "required_params": ["class_name"]
+    }
+}
+
+
+def validate_tool_arguments(tool_name: str, arguments: dict) -> None:
+    """Validate that all required parameters are present for a tool.
+    
+    Args:
+        tool_name: Name of the tool to validate
+        arguments: Dictionary of arguments provided
+        
+    Raises:
+        ValueError: If tool is not found or required parameters are missing
+    """
+    if tool_name not in TOOL_REGISTRY:
+        raise ValueError(f"Tool '{tool_name}' not found")
+    
+    tool_config = TOOL_REGISTRY[tool_name]
+    required_params = tool_config["required_params"]
+    
+    for param in required_params:
+        if param not in arguments or arguments[param] is None:
+            raise ValueError(f"Parameter '{param}' is missing")
+
+
 @server.call_tool()
 async def handle_tool_call(
     name: str, arguments: dict
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
-    """handles all tool calls!!!"""
-
+    """Handle all tool calls using the tool registry pattern."""
+    
     try:
         logger.debug(f"handling tool '{name}' with args {arguments}")
-        response = f"Error: Tool '{name}' not found"
-        if name == "web_search":
-            query = arguments.get("query")
-            if query == None:
-                raise ValueError("Parameter 'query' is missing")
-            response = await web_search(query)
-        if name == "open_in_browser":
-            url = arguments.get("url")
-            if url == None:
-                raise ValueError("Parameter 'url' is missing")
-            response = await open_in_browser(url)
-        if name == "execute_sql_query":
-            dbname = arguments.get("dbname")
-            if dbname == None:
-                raise ValueError("Parameter 'dbname' is missing")
-            query = arguments.get("query")
-            if query == None:
-                raise ValueError("Parameter 'query' is missing")
-            response = await execute_sql_query(dbname, query)
-        if name == "http_get_request":
-            url = arguments.get("url")
-            if url == None:
-                raise ValueError("Parameter 'url' is missing")
-            response = await http_get_request(url, arguments.get("headers"))
-        if name == "run_maven_tests":
-            class_name = arguments.get("test_pattern")
-            if class_name == None:
-                raise ValueError("Parameter 'test_pattern' is missing")
-            response = await run_tests("mvn", class_name)
-        if name == "run_gradle_tests":
-            class_name = arguments.get("test_pattern")
-            if class_name == None:
-                raise ValueError("Parameter 'test_pattern' is missing")
-            response = await run_tests("gradlew", class_name)
-        if name == "get_source":
-            class_name = arguments.get("class_name")
-            if class_name == None:
-                raise ValueError("Parameter 'class_name' is missing")
-            response = await get_source(class_name)
-        if name == "get_javadoc":
-            class_name = arguments.get("class_name")
-            if class_name == None:
-                raise ValueError("Parameter 'class_name' is missing")
-            response = await get_javadoc(class_name)
+        
+        # Validate tool exists and has required parameters
+        validate_tool_arguments(name, arguments)
+        
+        # Get tool configuration and execute handler
+        tool_config = TOOL_REGISTRY[name]
+        handler = tool_config["handler"]
+        
+        # Execute the tool handler
+        response = await handler(arguments)
+        
     except Exception as e:
         logger.error(f"Error handling tool call '{name}': {arguments}", exc_info=True)
         response = json.dumps({"error": f"Error handling tool call '{name}': {str(e)}"})
-    finally:
-        return to_text_context(response)
+    
+    return to_text_context(response)
 
 
 async def execute_sql_query(dbname: str, query: str) -> str:
@@ -358,7 +384,7 @@ async def web_search(query: str) -> str:
         "Accept-Encoding": "gzip",
         "X-Subscription-Token": brave_api_key,
     }
-    params = {"result_filter": "web", "count": 3, "q": query}
+    params = {"result_filter": "web", "count": 5, "q": query}
 
     async def fetch_url_content(meta: dict) -> dict:
         """Helper function to fetch content for a single URL."""
@@ -373,7 +399,9 @@ async def web_search(query: str) -> str:
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "").lower()
                 if "text/html" in content_type:
-                    text = html_to_markdown(response.content)
+                    # markdown converterer is not as good as expected
+                    # text = html_to_markdown(response.content)
+                    text = strip_text_from_html(response.content)
                     meta["content"] = text[:10000]
                     logger.info(
                         f"Successfully fetched and processed content from {meta['url']}"
@@ -382,7 +410,7 @@ async def web_search(query: str) -> str:
                     logger.warning(
                         f"Skipping non-HTML content ({content_type}) from {meta['url']}"
                     )
-                    meta["content"] = f"Skipped non-HTML content ({content_type})"
+                    meta["error"] = f"Skipped non-HTML content ({content_type})"
                 return meta
         except Exception as e:
             logger.error(
@@ -421,8 +449,11 @@ async def web_search(query: str) -> str:
                 if metas
                 else []
             )
+            # remove errors
+            filtered_findings = [f for f in findings if f.get("error") is None]
             logger.info("Finished fetching content for all URLs.")
-            return json.dumps(findings, cls=CustomJSONEncoder)
+            # first 3 findings are enough
+            return json.dumps(filtered_findings[:3], cls=CustomJSONEncoder)
 
     except Exception as e:
         logger.error(f"An unexpected error occurred in query_web: {e}", exc_info=True)
@@ -601,7 +632,7 @@ async def run():
             write_stream,
             InitializationOptions(
                 server_name="low-level",
-                server_version="0.1.0",
+                server_version="0.2.0",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},

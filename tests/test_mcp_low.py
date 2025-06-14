@@ -66,16 +66,17 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result == "Browser successfully opened")
 
     async def test_web_query(self):
-        findings_text = await web_search("latest gradle version")
+        findings_text = await web_search("latest python version")
         findings = json.loads(findings_text)
         self.assertIsNotNone(findings)
         self.assertEqual(len(findings), 3)
         for finding in findings:
+            self.assertIsNone(finding.get("error"))
             self.assertIsNotNone(finding["url"])
             self.assertIsNotNone(finding["description"])
             self.assertNotIn("<strong>", finding["description"])
             self.assertIsNotNone(finding["content"])
-            self.assertIn("gradle", finding["content"].lower())
+            self.assertIn("python", finding["content"].lower())
 
     async def test_source_maven(self):
         config["buildTool"] = "mvn"
