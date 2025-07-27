@@ -370,6 +370,9 @@ async def http_get_request(url: str, headers: dict = None) -> str:
 
 async def web_search(query: str) -> str:
     """Executes a search query using the Brave Search API and fetches content from the 3 top results"""
+    MAX_SEARCH_RESULTS = 10 # higher than number of results to return because request may fail
+    MAX_RESULTS_TO_RETURN = 5
+    MAX_RESULT_LENGTH = 10000
     logger.info(f"Executing web query: {query}")
     url = config["braveSearch"]["apiUrl"]
     brave_api_key = config["braveSearch"]["apiKey"]
@@ -384,7 +387,7 @@ async def web_search(query: str) -> str:
         "Accept-Encoding": "gzip",
         "X-Subscription-Token": brave_api_key,
     }
-    params = {"result_filter": "web", "count": 5, "q": query}
+    params = {"result_filter": "web", "count": MAX_SEARCH_RESULTS, "q": query}
 
     async def fetch_url_content(meta: dict) -> dict:
         """Helper function to fetch content for a single URL."""
@@ -402,7 +405,7 @@ async def web_search(query: str) -> str:
                     # markdown converterer is not as good as expected
                     # text = html_to_markdown(response.content)
                     text = strip_text_from_html(response.content)
-                    meta["content"] = text[:10000]
+                    meta["content"] = text[:MAX_RESULT_LENGTH]
                     logger.info(
                         f"Successfully fetched and processed content from {meta['url']}"
                     )
@@ -452,8 +455,8 @@ async def web_search(query: str) -> str:
             # remove errors
             filtered_findings = [f for f in findings if f.get("error") is None]
             logger.info("Finished fetching content for all URLs.")
-            # first 3 findings are enough
-            return json.dumps(filtered_findings[:3], cls=CustomJSONEncoder)
+            # do only return the most relevant findings
+            return json.dumps(filtered_findings[:MAX_RESULTS_TO_RETURN], cls=CustomJSONEncoder)
 
     except Exception as e:
         logger.error(f"An unexpected error occurred in query_web: {e}", exc_info=True)
