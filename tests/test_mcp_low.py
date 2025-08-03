@@ -69,7 +69,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         findings_text = await web_search("latest python version")
         findings = json.loads(findings_text)
         self.assertIsNotNone(findings)
-        self.assertEqual(len(findings), 3)
+        self.assertEqual(len(findings), 5)
         for finding in findings:
             self.assertIsNone(finding.get("error"))
             self.assertIsNotNone(finding["url"])
@@ -94,15 +94,15 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
     async def test_javadoc_gradle(self):
-        config["buildTool"] = "gradlew"
-        # path to maven project required
+        config["buildTool"] = "gradle"
+        # path to gradle project required
         config["projectFolder"] = testConfig.get("gradleProjectPath")
         html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
     async def test_source_gradle(self):
-        config["buildTool"] = "gradlew"
-        # path to maven project required
+        config["buildTool"] = "gradle"
+        # path to gradle project required
         config["projectFolder"] = testConfig.get("gradleProjectPath")
         code = await get_source("com.zaxxer.hikari.HikariDataSource")
         # original source starts with comment
