@@ -11,7 +11,7 @@ wheels/
 
 .vscode/
 
-mcp_server.log
+**/*.log
 **/.DS_Store
 
 .git/
