@@ -226,14 +226,6 @@ TOOL_REGISTRY = {
         "handler": lambda args: http_get_request(args["url"], args.get("headers")),
         "required_params": ["url"]
     },
-    "run_maven_tests": {
-        "handler": lambda args: run_tests("mvn", args["test_pattern"]),
-        "required_params": ["test_pattern"]
-    },
-    "run_gradle_tests": {
-        "handler": lambda args: run_tests("gradlew", args["test_pattern"]),
-        "required_params": ["test_pattern"]
-    },
     "get_source": {
         "handler": lambda args: get_source(args["class_name"]),
         "required_params": ["class_name"]
@@ -496,14 +488,6 @@ async def open_in_browser(url: str) -> str:
         return f"Error: {str(e)}"
 
 
-async def run_gradle_tests(test_pattern: str) -> str:
-    """Runs Gradle tests.
-    Executes "gradlew test --tests <test_pattern>" in the workspace directory.
-    If no test pattern is provided, it runs all tests.
-    """
-    return await run_tests("gradlew", test_pattern)
-
-
 async def get_source(class_name: str) -> str:
     """Decompiles a Java class and returns the source code."""
 
@@ -577,55 +561,6 @@ async def get_javadoc(class_name: str) -> str:
         return f"Error: No doc file for {html_file} found in {zip_path}"
     
     return content
-
-
-async def run_maven_tests(test_pattern: str) -> str:
-    """Runs Maven tests."""
-    return await run_tests("mvn", test_pattern)
-
-
-async def run_tests(tool_name: str, test_pattern: str):
-    workspace_path = await get_project_folder(server, config)
-    if not workspace_path:
-        logger.error("Workspace path is not set in the configuration.")
-        return "Error: Workspace path is not set in the configuration."
-
-    try:
-        if not test_pattern:
-            test_pattern = "*"
-        if tool_name == "mvn":
-            # remove old test results using python file operations
-            test_results_path = os.path.join(
-                workspace_path, "target", "surefire-reports"
-            )
-            shutil.rmtree(test_results_path)
-            # Maven command (with "quit" option)
-            test_command = [
-                tool_name,
-                "test",
-                "-q",
-                f"-Dtest={test_pattern}",
-                "surefire-report:report",
-            ]
-        else:
-            # Gradle command, make sure report generation is configured in build.gradle
-            test_command = [tool_name, "test", "--tests", test_pattern]
-
-        logger.debug(
-            f"Running test command: {' '.join(test_command)} in {workspace_path}"
-        )
-        # Execute the command in the workspace directory
-        result = subprocess.run(
-            test_command,
-            cwd=workspace_path,
-            text=True,
-            capture_output=True,
-        )
-
-        return handle_cmd_result(result)
-    except Exception as e:
-        logger.error(f"Error running tests: {e}", exc_info=True)
-        return f"Error: {str(e)}"
 
 
 async def run():
