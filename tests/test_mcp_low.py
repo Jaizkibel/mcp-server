@@ -78,28 +78,35 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(finding["content"])
             self.assertIn("python", finding["content"].lower())
 
+    @unittest.skip("Source test disabled: Needs existing Maven Project")
     async def test_source_maven(self):
         config["buildTool"] = "mvn"
         # path to maven project required
+        self.assertIsNotNone(testConfig.get("mavenProjectPath"))
         config["projectFolder"] = testConfig.get("mavenProjectPath")
         code = await get_source("com.zaxxer.hikari.HikariDataSource")
         # original source starts with comment
         self.assertTrue(code.startswith("/*\n"))
 
+    @unittest.skip("Javadoc test disabled: Needs existing Maven Project")
     async def test_javadoc_maven(self):
         config["buildTool"] = "mvn"
         # path to maven project required
+        self.assertIsNotNone(testConfig.get("mavenProjectPath"))
         config["projectFolder"] = testConfig.get("mavenProjectPath")
         html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
+    @unittest.skip("Javadoc test disabled: Needs existing Gradle Project")
     async def test_javadoc_gradle(self):
         config["buildTool"] = "gradle"
         # path to gradle project required
+        self.assertIsNotNone(testConfig.get("mavenProjectPath"))
         config["projectFolder"] = testConfig.get("gradleProjectPath")
         html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
+    @unittest.skip("Source test disabled: Needs existing Gradle Project")
     async def test_source_gradle(self):
         config["buildTool"] = "gradle"
         # path to gradle project required

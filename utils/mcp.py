@@ -23,8 +23,8 @@ async def get_project_folder(server: Server, config: dict) -> str:
     if config_path != None:
         return config_path
     
-    session: ServerSession = server.request_context.session
     try:
+        session: ServerSession = server.request_context.session
         caps: ClientCapabilities = session.client_params.capabilities
         logger.debug(f"Client caps: {caps}")
         if caps.roots != None:
