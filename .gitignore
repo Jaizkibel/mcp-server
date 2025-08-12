@@ -18,3 +18,5 @@ wheels/
 .coverage
 .continuerc.json
 brave-api.http
+.roo/mcp.json
+tests/config.yaml
