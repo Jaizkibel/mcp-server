@@ -26,7 +26,7 @@ from utils.helpers import (
 )
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
-from utils.mcp import get_project_folder, is_relative_path, to_text_context
+from utils.mcp_helpers import get_project_folder, is_relative_path, to_text_context
 from utils.web import (
     CustomJSONEncoder,
     close_http_client,

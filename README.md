@@ -173,10 +173,6 @@ The MCP server provides the following tools for AI assistants:
 - `open_in_browser(url)`: Opens a URL or file in the local browser
 - `http_get_request(url, headers)`: Makes an HTTP GET request to the specified URL
 
-### Test Execution
-- `run_gradle_tests(test_pattern)`: Runs Gradle tests with the specified pattern
-- `run_maven_tests(test_pattern)`: Runs Maven tests with the specified pattern
-
 ### Java Source Tools
 - `get_source(class_name)`: Returns the source of a Java class
 - `get_javadoc(class_name)`: Gets Javadoc for a Java class

@@ -30,7 +30,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         try:
             with open(configPath, "r") as file:
                 config.update(yaml.safe_load(file))
-            if config.get("projectFolder") == None:
+            if config.get("projectFolder") is None:
                 # set to location of this file
                 config["projectFolder"] = local_dir
         except Exception as e:

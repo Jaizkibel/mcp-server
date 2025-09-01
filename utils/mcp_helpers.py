@@ -1,33 +1,34 @@
 import logging
 import os
-from mcp import ClientCapabilities, ServerSession
-import mcp.types as types
-from mcp.server.lowlevel import Server
+from typing import Any
 
+from mcp.server.lowlevel import Server
+from mcp.server.session import ServerSession
+from mcp.types import ClientCapabilities, TextContent
 
 logger = logging.getLogger(__name__)
 
 
-def to_text_context(text: str) -> list[types.TextContent]: 
+def to_text_context(text: str) -> list[TextContent]:
     """ convert text to list of TextContent needed as tool call return value"""
     # logger.debug(f"converting text '{text}' to list of TextContent")
     if text is None:
         text = "No text available"
-    return [types.TextContent(type="text", text=text)]
+    return [TextContent(type="text", text=text)]
 
-async def get_project_folder(server: Server, config: dict) -> str:
+async def get_project_folder(server: Server, config: dict) -> str | None | Any:
     """Gets project directory from config.
     If not set try to ask mcp client for root directory
     """
     config_path = config.get("projectFolder")
-    if config_path != None:
+    if config_path is not None:
         return config_path
     
     try:
         session: ServerSession = server.request_context.session
         caps: ClientCapabilities = session.client_params.capabilities
         logger.debug(f"Client caps: {caps}")
-        if caps.roots != None:
+        if caps.roots is not None:
             roots = await session.list_roots()
             logger.debug(f"Client roots: {roots}")
             # roots are always of type file (not http),
