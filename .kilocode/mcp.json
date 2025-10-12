@@ -9,9 +9,7 @@
         "--directory",
         "/home/kruese/src/python/mcp-server",
         "run",
-        "mcp_server_low.py",
-        "--project-folder",
-        "/home/kruese/src/spring/mcp-decompiler"
+        "mcp_server_low.py"
       ],
       "transportType": "stdio",
       "alwaysAllow": [
