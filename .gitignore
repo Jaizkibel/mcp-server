@@ -21,3 +21,4 @@ wheels/
 brave-api.http
 .roo/mcp.json
 tests/config.yaml
+.idea

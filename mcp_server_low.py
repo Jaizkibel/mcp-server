@@ -1,8 +1,6 @@
 from contextlib import asynccontextmanager
 import json
-import os
 from pathlib import Path
-import shutil
 import subprocess
 import asyncio
 from typing import AsyncIterator
@@ -19,7 +17,6 @@ from utils.helpers import (
     get_companion_path,
     get_content_from_zip,
     get_gradle_jar,
-    handle_cmd_result,
     init_logging,
     get_maven_jar,
     decompile_from_jar,
@@ -30,7 +27,6 @@ from utils.mcp_helpers import get_project_folder, is_relative_path, to_text_cont
 from utils.web import (
     CustomJSONEncoder,
     close_http_client,
-    html_to_markdown,
     http_client_context,
     strip_strong_tags,
     strip_text_from_html,
