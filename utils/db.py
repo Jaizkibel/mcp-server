@@ -9,24 +9,32 @@ logger = logging.getLogger(__name__)
 _db_pools = {}
 
 
-async def get_db_pool(dbname: str, config: dict):
+async def get_db_pool(dbname: str, config: dict, read_only: bool):
     """Get or create a shared database connection pool based on vendor type."""
     global _db_pools
-    
-    if dbname not in _db_pools:
+
+    if read_only:
+        access_level = "readonly"
+    else:
+        access_level = "full"
+    poolname = f"${dbname}_${access_level}"
+
+    if poolname not in _db_pools:
         vendor = config["database"][dbname].get("vendor", "postgresql").lower()
-        
+
         if vendor == "postgresql":
-            _db_pools[dbname] = await asyncpg.create_pool(
-                user=config["database"][dbname]["username"],
-                password=config["database"][dbname]["password"],
+            _db_pools[poolname] = await asyncpg.create_pool(
+                user=config["database"][dbname][access_level]["username"],
+                password=config["database"][dbname][access_level]["password"],
                 database=config["database"][dbname]["dbname"],
                 host=config["database"][dbname]["host"],
                 port=config["database"][dbname]["port"],
                 min_size=config["database"]["min_size"],
                 max_size=config["database"]["max_size"],
                 max_queries=config["database"]["max_queries"],
-                max_inactive_connection_lifetime=config["database"]["max_inactive_connection_lifetime"]
+                max_inactive_connection_lifetime=config["database"][
+                    "max_inactive_connection_lifetime"
+                ],
             )
         elif vendor == "sqlserver":
             # Connection string for SQL Server
@@ -38,8 +46,8 @@ async def get_db_pool(dbname: str, config: dict):
                 f"PWD={config['database'][dbname]['password']};"
                 f"TrustServerCertificate=yes;"  # Added to ignore certificate verification errors
             )
-            
-            _db_pools[dbname] = await aioodbc.create_pool(
+
+            _db_pools[poolname] = await aioodbc.create_pool(
                 dsn=dsn,
                 minsize=config["database"]["min_size"],
                 maxsize=config["database"]["max_size"],
@@ -47,17 +55,18 @@ async def get_db_pool(dbname: str, config: dict):
             )
         else:
             raise ValueError(f"Unsupported database vendor: {vendor}")
-    
-    return _db_pools[dbname]
+
+    return _db_pools[poolname]
+
 
 @asynccontextmanager
-async def db_connection_context(dbname: str, config: dict):
+async def db_connection_context(dbname: str, config: dict, read_only: bool):
     """Context manager for database operations using connection pool."""
     conn = None
     try:
         vendor = config["database"][dbname].get("vendor", "postgresql").lower()
-        pool = await get_db_pool(dbname, config)
-        
+        pool = await get_db_pool(dbname, config, read_only)
+
         conn = await pool.acquire()
         yield conn
     except Exception as e:
@@ -70,6 +79,7 @@ async def db_connection_context(dbname: str, config: dict):
                 pool = _db_pools.get(dbname)
                 if pool:
                     await pool.release(conn)
+
 
 async def close_db_pool():
     """Close all database connection pools."""

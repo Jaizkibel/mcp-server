@@ -8,6 +8,7 @@ import zipfile
 
 logger = logging.getLogger(__name__)
 
+
 def init_logging(log_directory: str, file_name: str):
     # Create the directory if it doesn't exist
     if not os.path.exists(log_directory):
@@ -19,6 +20,7 @@ def init_logging(log_directory: str, file_name: str):
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
+
 def handle_cmd_result(result: CompletedProcess) -> str:
     # Check if the command was successful
     if result.returncode == 0:
@@ -28,6 +30,7 @@ def handle_cmd_result(result: CompletedProcess) -> str:
         errmsg = result.stdout + "\n" + result.stderr
         logger.error(f"Command failed: {errmsg}")
         return f"Error: {errmsg}"
+
 
 def get_maven_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
     command = [build_tool, "dependency:build-classpath"]
@@ -53,11 +56,14 @@ def get_maven_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
     # find line containing ".jar"
     classpath_lines = [l for l in lines if ".jar" in l]
     if len(classpath_lines) != 1:
-        logger.error(f"There should only be 1 line containing jar in list {classpath_lines}")
+        logger.error(
+            f"There should only be 1 line containing jar in list {classpath_lines}"
+        )
         return None
     # Split by ':' to get individual JAR paths
     jar_paths = classpath_lines[0].split(":")
     return find_jar_for_class(class_name, jar_paths)
+
 
 def get_gradle_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
     command = [build_tool, "listAllJars"]
@@ -74,18 +80,19 @@ def get_gradle_jar(build_tool: str, class_name: str, workspace_path: str) -> str
         return None
 
     classpath_output = result.stdout
-    lines = classpath_output.split('\n')
+    lines = classpath_output.split("\n")
     # find line containing ".jar"
     classpath_lines = [l for l in lines if ".jar" in l]
     return find_jar_for_class(class_name, classpath_lines)
 
+
 def find_jar_for_class(class_name: str, jar_paths: list) -> str:
     """Find first JAR containing the specified class"""
-    class_file = class_name.replace('.', '/') + '.class'
+    class_file = class_name.replace(".", "/") + ".class"
     matching_jar: str = None
     for jar in jar_paths:
         try:
-            with zipfile.ZipFile(jar, 'r') as zip_ref:
+            with zipfile.ZipFile(jar, "r") as zip_ref:
                 if class_file in zip_ref.namelist():
                     matching_jar = jar
                     break
@@ -94,21 +101,29 @@ def find_jar_for_class(class_name: str, jar_paths: list) -> str:
             return None
     return matching_jar
 
+
 def decompile_from_jar(class_name: str, jar_path: str, root_path: Path) -> str:
     """
     Decompiles a Java class from JAR files.
-    
+
     Args:
         class_name: The full class name (e.g., 'com.example.MyClass')
         jar_paths: List of JAR file paths to search in
         root_path: Root path where the decompiler JAR is located
-        
+
     Returns:
         The decompiled source code or an error message
     """
     decompiler_jar = root_path / "bin" / "jd-cli.jar"
-    decompile_command = ["java", "-jar", str(decompiler_jar), "--outputConsole",
-                            "--pattern", class_name, jar_path]  # Remove quotes around class_name
+    decompile_command = [
+        "java",
+        "-jar",
+        str(decompiler_jar),
+        "--outputConsole",
+        "--pattern",
+        class_name,
+        jar_path,
+    ]  # Remove quotes around class_name
     logger.info(f"Executing '{' '.join(decompile_command)}'")
     result = subprocess.run(
         decompile_command,
@@ -119,13 +134,16 @@ def decompile_from_jar(class_name: str, jar_path: str, root_path: Path) -> str:
     if result.returncode != 0:
         logger.error(f"Java decompile command failed: {result.stderr}")
         return f"Error: Decompile command failed: {result.stderr}"
-    
+
     # Filter out logging output from the result
-    # there is logging output in the decompiler output. 
+    # there is logging output in the decompiler output.
     # remove it
     lines = result.stdout.split("\n")
-    source_lines = [l for l in lines if not re.match(r'^\d{2}:\d{2}:\d{2}\.\d+ (INFO|WARN)', l)]
-    return '\n'.join(source_lines)
+    source_lines = [
+        l for l in lines if not re.match(r"^\d{2}:\d{2}:\d{2}\.\d+ (INFO|WARN)", l)
+    ]
+    return "\n".join(source_lines)
+
 
 def get_companion_path(build_tool: str, jar_path: str, suffix: str) -> str:
     if "mvn" in build_tool:
@@ -145,13 +163,16 @@ def get_companion_path(build_tool: str, jar_path: str, suffix: str) -> str:
         if match:
             root_folder = match.group(1)
             file_name = match.group(3)
-        zip_path = find_file_in_folder(root_folder, file_name.replace(".jar", f"-{suffix}.jar"))
+        zip_path = find_file_in_folder(
+            root_folder, file_name.replace(".jar", f"-{suffix}.jar")
+        )
 
     return zip_path
 
+
 def get_content_from_zip(zip_path: str, file_name: str) -> str:
     try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
             name_list = zip_ref.namelist()
             # first entry of name_list, that ends with class_file
             class_file_path = next(
@@ -160,13 +181,14 @@ def get_content_from_zip(zip_path: str, file_name: str) -> str:
             if class_file_path is None:
                 logger.error(f"Error: File {file_name} not found in Javadoc {zip_path}")
                 return None
-                
+
             with zip_ref.open(class_file_path) as f:
-                content = f.read().decode('utf-8')
+                content = f.read().decode("utf-8")
                 return content
     except Exception as e:
         logger.error(f"Error extracting file from zip: {str(e)}", exc_info=True)
         return None
+
 
 def find_file_in_folder(root_dir: str, file_name: str) -> str:
     """
@@ -186,3 +208,12 @@ def find_file_in_folder(root_dir: str, file_name: str) -> str:
             if compiled_regex.search(filename):
                 return os.path.join(dirpath, filename)
     return None
+
+
+def has_item_in_section(config: dict, section_name: str, item_name: str) -> bool:
+    if section_name in config:
+        for db_name, sub_config in config[section_name].items():
+            # Skip pool configuration items (min_size, max_size, etc.)
+            if isinstance(sub_config, dict) and item_name in sub_config:
+                return True
+    return False

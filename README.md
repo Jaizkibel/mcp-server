@@ -42,11 +42,18 @@ database:
   
   # Database connection profiles
   musiciandb:  # This is referenced by --db-name parameter
-    username: "readonly"
-    password: "readonly"
+    vendor: postgresql
     dbname: "postgresdb"
     host: "localhost"
     port: 5432
+    readonly:
+      # credentials for readonly access
+      username: "readonly"
+      password: "readonly"
+    full:
+      # credentials for full access
+      username: "admin"
+      password: "secret"
 
 # Browser command for opening URLs
 browserCommand: firefox
