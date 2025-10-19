@@ -173,16 +173,17 @@ To share the MCP server configuration with your team:
 The MCP server provides the following tools for AI assistants:
 
 ### Database Operations
-- `execute_sql_query(query)`: Executes a read-only SQL query on a configured PostgreSQL or SqlServer database
+- `readonly_sql_query(dbname, query)`: Executes a read-only SQL query on a PostgreSQL or SqlServer database and returns the result as JSON
+- `modifying_sql_statement(dbname, statement)`: Executes a SQL statement on a PostgreSQL or SqlServer database to modify data (only available if "full" database credentials are configured)
 
 ### Web Interaction
-- `web_search(query)`: Executes a search query using the Brave Search API and fetches content from top results
-- `open_in_browser(url)`: Opens a URL or file in the local browser
-- `http_get_request(url, headers)`: Makes an HTTP GET request to the specified URL
+- `web_search(query)`: Search the web for information using the Brave Search API. Returns URLs, descriptions, and fetched content from top results (HTML content is converted to text)
+- `open_in_browser(url)`: Opens a URL or HTML file in the local browser
+- `http_get_request(url, headers)`: Makes an HTTP GET request to the specified URL with optional headers
 
-### Java Source Tools
-- `get_source(class_name)`: Returns the source of a Java class
-- `get_javadoc(class_name)`: Gets Javadoc for a Java class
+### Java Build Tools (only available when buildTool is configured)
+- `get_source(class_name)`: Returns the source code of a Java class (does not work with Java standard library classes)
+- `get_javadoc(class_name)`: Gets Javadoc for a Java class (does not work with Java standard library classes)
 
 ## API
 

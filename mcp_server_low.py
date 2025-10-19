@@ -154,42 +154,6 @@ async def list_tools() -> list[types.Tool]:
 
     if config.get("buildTool") is not None:
         logger.debug("Adding build related tools")
-        if "mvn" in config["buildTool"]:
-            tools.append(
-                types.Tool(
-                    name="run_maven_tests",
-                    description="Runs Maven tests. Executes 'mvn test -q -Dtest=<test_pattern> surefire-report:report'",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "test_pattern": {
-                                "type": "string",
-                                "description": "The pattern matching test files to execute",
-                            }
-                        },
-                        "required": ["test_pattern"],
-                    },
-                    annotations={"readOnlyHint": True, "openWorldHint": False},
-                )
-            )
-        if "gradle" in config["buildTool"]:
-            tools.append(
-                types.Tool(
-                    name="run_gradle_tests",
-                    description="Runs Gradle tests. Executes 'gradlew test -tests <test_pattern>'",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "test_pattern": {
-                                "type": "string",
-                                "description": "The pattern matching test files to execute",
-                            }
-                        },
-                        "required": ["test_pattern"],
-                    },
-                    annotations={"readOnlyHint": True, "openWorldHint": False},
-                )
-            )
         tools.append(
             types.Tool(
                 name="get_source",
