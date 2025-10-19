@@ -16,7 +16,8 @@
         "execute_sql_query",
         "decompile_java_class",
         "web_search",
-        "http_get_request"
+        "http_get_request",
+        "readonly_sql_query"
       ]
     }
   }

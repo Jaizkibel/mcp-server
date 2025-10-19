@@ -133,7 +133,7 @@ async def list_tools() -> list[types.Tool]:
         tools.append(
             types.Tool(
                 name="modifying_sql_statement",
-                description="Executes a SQL statement on a PostgreSQL or SqlServer database to modify data and returns the a status message as JSON.",
+                description="Executes a SQL statement on a PostgreSQL or SqlServer database to modify data and returns the a status message as JSON. The statement is automatically commited.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -141,12 +141,12 @@ async def list_tools() -> list[types.Tool]:
                             "type": "string",
                             "description": "The name of the database to connect.",
                         },
-                        "query": {
+                        "statement": {
                             "type": "string",
-                            "description": "The SQL query to execute",
+                            "description": "The SQL statement to execute",
                         },
                     },
-                    "required": ["dbname", "query"],
+                    "required": ["dbname", "statement"],
                 },
                 annotations={"readOnlyHint": False, "openWorldHint": False},
             )
