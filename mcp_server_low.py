@@ -1,8 +1,6 @@
 from contextlib import asynccontextmanager
 import json
-import os
 from pathlib import Path
-import shutil
 import subprocess
 import asyncio
 from typing import AsyncIterator
@@ -19,10 +17,10 @@ from utils.helpers import (
     get_companion_path,
     get_content_from_zip,
     get_gradle_jar,
-    handle_cmd_result,
     init_logging,
     get_maven_jar,
     decompile_from_jar,
+    has_item_in_section,
 )
 from utils.args import parse_arguments
 from utils.db import close_db_pool, db_connection_context
@@ -30,7 +28,6 @@ from utils.mcp_helpers import get_project_folder, is_relative_path, to_text_cont
 from utils.web import (
     CustomJSONEncoder,
     close_http_client,
-    html_to_markdown,
     http_client_context,
     strip_strong_tags,
     strip_text_from_html,
@@ -93,25 +90,6 @@ async def list_tools() -> list[types.Tool]:
             annotations={"readOnlyHint": True, "openWorldHint": True},
         ),
         types.Tool(
-            name="execute_sql_query",
-            description="Executes a read-only SQL query on a PostgreSQL or SqlServer database and returns the result as JSON.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "dbname": {
-                        "type": "string",
-                        "description": "The name of the database to connect.",
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "The SQL query to execute",
-                    },
-                },
-                "required": ["dbname", "query"],
-            },
-            annotations={"readOnlyHint": True, "openWorldHint": False},
-        ),
-        types.Tool(
             name="http_get_request",
             description="Makes an HTTP GET request to the specified URL with optional headers.",
             inputSchema={
@@ -130,45 +108,52 @@ async def list_tools() -> list[types.Tool]:
             },
             annotations={"readOnlyHint": True, "openWorldHint": True},
         ),
+        types.Tool(
+            name="readonly_sql_query",
+            description="Executes a read-only SQL query on a PostgreSQL or SqlServer database and returns the result as JSON.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "dbname": {
+                        "type": "string",
+                        "description": "The name of the database to connect.",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "The SQL query to execute",
+                    },
+                },
+                "required": ["dbname", "query"],
+            },
+            annotations={"readOnlyHint": True, "openWorldHint": False},
+        ),
     ]
+    # add db change tool if "full" credentials are defined for any database
+    if has_item_in_section(config, "database", "full"):
+        tools.append(
+            types.Tool(
+                name="modifying_sql_statement",
+                description="Executes a SQL statement on a PostgreSQL or SqlServer database to modify data and returns the a status message as JSON. The statement is automatically commited.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "dbname": {
+                            "type": "string",
+                            "description": "The name of the database to connect.",
+                        },
+                        "statement": {
+                            "type": "string",
+                            "description": "The SQL statement to execute",
+                        },
+                    },
+                    "required": ["dbname", "statement"],
+                },
+                annotations={"readOnlyHint": False, "openWorldHint": False},
+            )
+        )
+
     if config.get("buildTool") is not None:
         logger.debug("Adding build related tools")
-        if "mvn" in config["buildTool"]:
-            tools.append(
-                types.Tool(
-                    name="run_maven_tests",
-                    description="Runs Maven tests. Executes 'mvn test -q -Dtest=<test_pattern> surefire-report:report'",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "test_pattern": {
-                                "type": "string",
-                                "description": "The pattern matching test files to execute",
-                            }
-                        },
-                        "required": ["test_pattern"],
-                    },
-                    annotations={"readOnlyHint": True, "openWorldHint": False},
-                )
-            )
-        if "gradle" in config["buildTool"]:
-            tools.append(
-                types.Tool(
-                    name="run_gradle_tests",
-                    description="Runs Gradle tests. Executes 'gradlew test -tests <test_pattern>'",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "test_pattern": {
-                                "type": "string",
-                                "description": "The pattern matching test files to execute",
-                            }
-                        },
-                        "required": ["test_pattern"],
-                    },
-                    annotations={"readOnlyHint": True, "openWorldHint": False},
-                )
-            )
         tools.append(
             types.Tool(
                 name="get_source",
@@ -212,47 +197,55 @@ async def list_tools() -> list[types.Tool]:
 TOOL_REGISTRY = {
     "web_search": {
         "handler": lambda args: web_search(args["query"]),
-        "required_params": ["query"]
+        "required_params": ["query"],
     },
     "open_in_browser": {
         "handler": lambda args: open_in_browser(args["url"]),
-        "required_params": ["url"]
+        "required_params": ["url"],
     },
-    "execute_sql_query": {
-        "handler": lambda args: execute_sql_query(args["dbname"], args["query"]),
-        "required_params": ["dbname", "query"]
+    "readonly_sql_query": {
+        "handler": lambda args: execute_sql_statement(
+            args["dbname"], args["query"], read_only=True
+        ),
+        "required_params": ["dbname", "query"],
+    },
+    "modifying_sql_statement": {
+        "handler": lambda args: execute_sql_statement(
+            args["dbname"], args["statement"], read_only=False
+        ),
+        "required_params": ["dbname", "statement"],
     },
     "http_get_request": {
         "handler": lambda args: http_get_request(args["url"], args.get("headers")),
-        "required_params": ["url"]
+        "required_params": ["url"],
     },
     "get_source": {
         "handler": lambda args: get_source(args["class_name"]),
-        "required_params": ["class_name"]
+        "required_params": ["class_name"],
     },
     "get_javadoc": {
         "handler": lambda args: get_javadoc(args["class_name"]),
-        "required_params": ["class_name"]
-    }
+        "required_params": ["class_name"],
+    },
 }
 
 
 def validate_tool_arguments(tool_name: str, arguments: dict) -> None:
     """Validate that all required parameters are present for a tool.
-    
+
     Args:
         tool_name: Name of the tool to validate
         arguments: Dictionary of arguments provided
-        
+
     Raises:
         ValueError: If tool is not found or required parameters are missing
     """
     if tool_name not in TOOL_REGISTRY:
         raise ValueError(f"Tool '{tool_name}' not found")
-    
+
     tool_config = TOOL_REGISTRY[tool_name]
     required_params = tool_config["required_params"]
-    
+
     for param in required_params:
         if param not in arguments or arguments[param] is None:
             raise ValueError(f"Parameter '{param}' is missing")
@@ -263,36 +256,37 @@ async def handle_tool_call(
     name: str, arguments: dict
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
     """Handle all tool calls using the tool registry pattern."""
-    
+
     try:
         logger.debug(f"handling tool '{name}' with args {arguments}")
-        
+
         # Validate tool exists and has required parameters
         validate_tool_arguments(name, arguments)
-        
+
         # Get tool configuration and execute handler
         tool_config = TOOL_REGISTRY[name]
         handler = tool_config["handler"]
-        
+
         # Execute the tool handler
         response = await handler(arguments)
-        
+
     except Exception as e:
         logger.error(f"Error handling tool call '{name}': {arguments}", exc_info=True)
         response = json.dumps({"error": f"Error handling tool call '{name}': {str(e)}"})
-    
+
     return to_text_context(response)
 
 
-async def execute_sql_query(dbname: str, query: str) -> str:
-    """Executes a read-only SQL query on a database and returns the result as JSON.
+async def execute_sql_statement(dbname: str, query: str, read_only: bool) -> str:
+    """Executes a SQL query on a database and returns the result as JSON.
     Supports both PostgreSQL and SQL Server databases.
+    If flag read_only is true, a read_only connection is used
     """
     logger.info(f"Executing SQL query: {query}")
 
     conn = None
     try:
-        async with db_connection_context(dbname, config) as conn:
+        async with db_connection_context(dbname, config, read_only) as conn:
             logger.info("Database connection established.")
 
             # Determine database vendor
@@ -300,24 +294,50 @@ async def execute_sql_query(dbname: str, query: str) -> str:
 
             if vendor == "postgresql":
                 # PostgreSQL execution
-                result = await conn.fetch(query)
-                logger.info(
-                    f"Query executed successfully on PostgreSQL. Fetched {len(result)} records."
-                )
-                result_dict = [dict(record) for record in result]
+                if read_only:
+                    # exexute select
+                    result = await conn.fetch(query)
+                    logger.info(
+                        f"Query executed successfully on PostgreSQL. Fetched {len(result)} records."
+                    )
+                    result_dict = [dict(record) for record in result]
+                else:
+                    # execute insert/update/delete and get status with explicit transaction
+                    async with conn.transaction():
+                        result = await conn.execute(query)
+                    logger.info(
+                        f"Statement executed successfully on PostgreSQL. Status: {result}"
+                    )
+                    result_dict = {
+                        "status": result,
+                        "message": "Statement executed successfully",
+                    }
 
             elif vendor == "sqlserver":
-                # SQL Server execution
                 cursor = await conn.cursor()
                 await cursor.execute(query)
-                columns = [column[0] for column in cursor.description]
-                rows = await cursor.fetchall()
-                await cursor.close()
 
-                logger.info(
-                    f"Query executed successfully on SQL Server. Fetched {len(rows)} records."
-                )
-                result_dict = [dict(zip(columns, row)) for row in rows]
+                if read_only:
+                    # collect result seet
+                    columns = [column[0] for column in cursor.description]
+                    rows = await cursor.fetchall()
+                    result_dict = [dict(zip(columns, row)) for row in rows]
+                    logger.info(
+                        f"Query executed successfully on SQL Server. Fetched {len(rows)} records."
+                    )
+                else:
+                    # get number of affected rows
+                    affected_rows = cursor.rowcount
+                    await conn.commit()  # Commit the transaction
+                    result_dict = {
+                        "affected_rows": affected_rows,
+                        "message": "Statement executed successfully",
+                    }
+                    logger.info(
+                        f"Statement executed successfully on SQL Server. Affected {affected_rows} rows."
+                    )
+
+                await cursor.close()
 
             else:
                 return json.dumps({"error": f"Unsupported database vendor: {vendor}"})
@@ -362,7 +382,9 @@ async def http_get_request(url: str, headers: dict = None) -> str:
 
 async def web_search(query: str) -> str:
     """Executes a search query using the Brave Search API and fetches content from the 3 top results"""
-    MAX_SEARCH_RESULTS = 10 # higher than number of results to return because request may fail
+    MAX_SEARCH_RESULTS = (
+        10  # higher than number of results to return because request may fail
+    )
     MAX_RESULTS_TO_RETURN = 5
     MAX_RESULT_LENGTH = 10000
     logger.info(f"Executing web query: {query}")
@@ -448,7 +470,9 @@ async def web_search(query: str) -> str:
             filtered_findings = [f for f in findings if f.get("error") is None]
             logger.info("Finished fetching content for all URLs.")
             # do only return the most relevant findings
-            return json.dumps(filtered_findings[:MAX_RESULTS_TO_RETURN], cls=CustomJSONEncoder)
+            return json.dumps(
+                filtered_findings[:MAX_RESULTS_TO_RETURN], cls=CustomJSONEncoder
+            )
 
     except Exception as e:
         logger.error(f"An unexpected error occurred in query_web: {e}", exc_info=True)
@@ -507,16 +531,16 @@ async def get_source(class_name: str) -> str:
         jar_path = get_gradle_jar(build_tool, class_name, workspace_path)
     else:
         return f"Error: Build tool {build_tool} is not supported"
-    
+
     if jar_path is None:
         return f"Error: No source for class {class_name} found"
-    
+
     # try source jar first, maybe it is downloaded
     # to download all source jars, use 'mvn dependency:sources'
     zip_path = get_companion_path(build_tool, jar_path, "sources")
     if zip_path is not None:
         # Convert class name to path (com.example.MyClass → com/example/MyClass.html)
-        java_file = class_name.replace('.', '/') + '.java'
+        java_file = class_name.replace(".", "/") + ".java"
         content = get_content_from_zip(zip_path, java_file)
         if content is None:
             return f"Error: No doc file for {java_file} found in {zip_path}"
@@ -526,9 +550,10 @@ async def get_source(class_name: str) -> str:
     # fallback: decompile
     return decompile_from_jar(class_name, jar_path, rootPath)
 
+
 async def get_javadoc(class_name: str) -> str:
     """Gets Javadoc for class.
-    
+
     Works with downloaded Javadoc jars only.
     Use 'mvn dependency:resolve -Dclassifier=javadoc' to download them.
     """
@@ -548,18 +573,18 @@ async def get_javadoc(class_name: str) -> str:
         jar_path = get_gradle_jar(build_tool, class_name, workspace_path)
     else:
         return f"Error: Build tool {build_tool} is not supported"
-    
+
     # lookup corresponding javadoc file (zipped)
     zip_path = get_companion_path(build_tool, jar_path, "javadoc")
     if zip_path is None:
         return f"Error: No javadoc jar found for class {class_name}"
 
     # Convert class name to path (com.example.MyClass → com/example/MyClass.html)
-    html_file = class_name.replace('.', '/') + '.html'
+    html_file = class_name.replace(".", "/") + ".html"
     content = get_content_from_zip(zip_path, html_file)
     if content is None:
         return f"Error: No doc file for {html_file} found in {zip_path}"
-    
+
     return content
 
 

@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "mcp-server-low": {
+      "autoApprove": [],
+      "disabled": false,
+      "timeout": 60,
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/home/kruese/src/python/mcp-server",
+        "run",
+        "mcp_server_low.py"
+      ],
+      "transportType": "stdio",
+      "alwaysAllow": [
+        "execute_sql_query",
+        "decompile_java_class",
+        "web_search",
+        "http_get_request",
+        "readonly_sql_query"
+      ]
+    }
+  }
+}

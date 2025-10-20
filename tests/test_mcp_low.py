@@ -5,14 +5,14 @@ import os
 from unittest.mock import patch, AsyncMock, MagicMock
 from mcp_server_low import (
     get_source,
-    execute_sql_query,
+    execute_sql_statement,
     get_javadoc,
     http_get_request,
     config,
     list_tools,
     web_search,
-    open_in_browser
-)    
+    open_in_browser,
+)
 import datetime
 import requests
 from httpx import Response
@@ -21,6 +21,7 @@ from pathlib import Path
 local_dir = os.path.dirname(os.path.abspath(__file__))
 
 testConfig = {}
+
 
 class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     @classmethod
@@ -38,7 +39,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         """Load test config file before any tests run."""
         try:
 
-            with open(os.path.join(local_dir,"config.yaml"), "r") as file:
+            with open(os.path.join(local_dir, "config.yaml"), "r") as file:
                 testConfig.update(yaml.safe_load(file))
         except Exception as e:
             print(f"Failed to load test config: {e}")
@@ -49,16 +50,37 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         tools = await list_tools()
         self.assertEqual(len(tools), 7)
 
-    async def test_postgres_sql_query(self):
-        db_name = 'musiciandb'
-        result = await execute_sql_query(db_name, 'SELECT 2 + 2 as result')
-        self.assertEqual(result, "[{\"result\": 4}]")
+    async def test_postgres_selects(self):
+        db_name = "musiciandb"
+        result = await execute_sql_statement(
+            db_name, "SELECT 2 + 2 as result", read_only=True
+        )
+        self.assertEqual(result, '[{"result": 4}]')
 
-        result = await execute_sql_query(db_name, "SELECT NOW() as result")
-        self.assertTrue(result.startswith("[{\"result\": \""))
+        result = await execute_sql_statement(
+            db_name, "SELECT NOW() as result", read_only=True
+        )
+        self.assertTrue(result.startswith('[{"result": "'))
 
-        result = await execute_sql_query(db_name, "SELECT 1.23456789 as result")
-        self.assertEqual(result, "[{\"result\": 1.23456789}]")
+        result = await execute_sql_statement(
+            db_name, "SELECT 1.23456789 as result", read_only=True
+        )
+        self.assertEqual(result, '[{"result": 1.23456789}]')
+
+    # @unittest.skip("needs implementation")
+    async def test_postgres_changes(self):
+        db_name = "musiciandb"
+        # insert 1 row
+        result = await execute_sql_statement(
+            db_name, "insert into musician.band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')", read_only=False
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result, '{"status": "INSERT 0 1", "message": "Statement executed successfully"}')
+        # dete it again
+        result = await execute_sql_statement(
+            db_name, "delete from musician.band where name = 'Beatles'", read_only=False
+        )
+        self.assertEqual(result, '{"status": "DELETE 1", "message": "Statement executed successfully"}')
 
     @unittest.skip("Browser test disabled - requires manual interaction")
     async def test_open_in_browser(self):
@@ -115,14 +137,14 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         # original source starts with comment
         self.assertTrue(code.startswith("/*\n"))
 
-    @patch('utils.web.get_http_client')
+    @patch("utils.web.get_http_client")
     async def test_http_get_request_success(self, mock_get_client):
         mock_client = AsyncMock()
         mock_get_client.return_value = mock_client
 
         mock_response = MagicMock(spec=Response)
         mock_response.status_code = 200
-        mock_response.headers = {'Content-Type': 'application/json'}
+        mock_response.headers = {"Content-Type": "application/json"}
         mock_response.text = '{"key": "value"}'
         mock_client.get.return_value = mock_response
 
@@ -139,7 +161,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         result_data = json.loads(result)
         self.assertIn("error", result_data)
 
-    @patch('utils.web.get_http_client')
+    @patch("utils.web.get_http_client")
     async def test_http_get_request_with_headers(self, mock_get_client):
         mock_client = AsyncMock()
         mock_get_client.return_value = mock_client
@@ -147,7 +169,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         mock_response = MagicMock(spec=Response)
         mock_response.status_code = 200
         mock_response.headers = {}
-        mock_response.text = 'OK'
+        mock_response.text = "OK"
         mock_client.get.return_value = mock_response
 
         headers = {"Authorization": "Bearer token"}
@@ -156,11 +178,10 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result_data["status_code"], 200)
         mock_client.get.assert_called_once_with(
-            "https://example.com/api",
-            headers={"Authorization": "Bearer token"}
+            "https://example.com/api", headers={"Authorization": "Bearer token"}
         )
 
-    @patch('utils.web.get_http_client')
+    @patch("utils.web.get_http_client")
     async def test_http_get_request_error(self, mock_get_client):
         mock_client = AsyncMock()
         mock_get_client.return_value = mock_client
@@ -171,6 +192,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("error", result_data)
         self.assertIn("Connection error", result_data["error"])
+
 
 if __name__ == "__main__":
     unittest.main()
