@@ -42,8 +42,8 @@ async def get_db_pool(dbname: str, config: dict, read_only: bool):
                 f"DRIVER={{ODBC Driver 18 for SQL Server}};"
                 f"SERVER={config['database'][dbname]['host']},{config['database'][dbname]['port']};"
                 f"DATABASE={config['database'][dbname]['dbname']};"
-                f"UID={config['database'][dbname]['username']};"
-                f"PWD={config['database'][dbname]['password']};"
+                f"UID={config['database'][dbname][access_level]['username']};"
+                f"PWD={config['database'][dbname][access_level]['password']};"
                 f"TrustServerCertificate=yes;"  # Added to ignore certificate verification errors
             )
 
