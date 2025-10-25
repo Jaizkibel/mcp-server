@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import json
+import logging
 from pathlib import Path
 import subprocess
 import asyncio
@@ -9,7 +10,6 @@ import mcp.server.stdio
 import mcp.types as types
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
-import logging
 
 import yaml
 
@@ -50,7 +50,7 @@ async def server_lifespan(server: Server) -> AsyncIterator[dict]:
     try:
         yield {}
     finally:
-        asyncio.run(cleanup())
+        await cleanup()
 
 
 # Pass lifespan to server
@@ -60,7 +60,7 @@ server = Server("low-level-server", lifespan=server_lifespan)
 @server.list_tools()
 async def list_tools() -> list[types.Tool]:
     """Lists all available tools."""
-    logger.debug("Collection tools")
+    logger.debug("Collecting tools")
     tools = [
         types.Tool(
             name="web_search",
@@ -72,11 +72,11 @@ async def list_tools() -> list[types.Tool]:
                 },
                 "required": ["query"],
             },
-            annotations={"readOnlyHint": True, "openWorldHint": True},
+            annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=True),
         ),
         types.Tool(
             name="open_in_browser",
-            description="Opens a url or file in the local browser .Returns a success or error message.",
+            description="Opens a url or file in the local browser. Returns a success or error message.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -87,7 +87,7 @@ async def list_tools() -> list[types.Tool]:
                 },
                 "required": ["url"],
             },
-            annotations={"readOnlyHint": True, "openWorldHint": True},
+            annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=True),
         ),
         types.Tool(
             name="http_get_request",
@@ -106,7 +106,7 @@ async def list_tools() -> list[types.Tool]:
                 },
                 "required": ["url"],
             },
-            annotations={"readOnlyHint": True, "openWorldHint": True},
+            annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=True),
         ),
         types.Tool(
             name="readonly_sql_query",
@@ -125,7 +125,7 @@ async def list_tools() -> list[types.Tool]:
                 },
                 "required": ["dbname", "query"],
             },
-            annotations={"readOnlyHint": True, "openWorldHint": False},
+            annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=False),
         ),
     ]
     # add db change tool if "full" credentials are defined for any database
@@ -133,7 +133,7 @@ async def list_tools() -> list[types.Tool]:
         tools.append(
             types.Tool(
                 name="modifying_sql_statement",
-                description="Executes a SQL statement on a PostgreSQL or SqlServer database to modify data and returns the a status message as JSON. The statement is automatically commited.",
+                description="Executes a SQL statement on a PostgreSQL or SqlServer database to modify data and returns the a status message as JSON. The statement is automatically committed.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -148,7 +148,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "required": ["dbname", "statement"],
                 },
-                annotations={"readOnlyHint": False, "openWorldHint": False},
+                annotations=types.ToolAnnotations(readOnlyHint=False, openWorldHint=False, idempotentHint=False),
             )
         )
 
@@ -168,7 +168,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "required": ["class_name"],
                 },
-                annotations={"readOnlyHint": True, "openWorldHint": False},
+                annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=False),
             )
         )
         tools.append(
@@ -185,11 +185,11 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "required": ["class_name"],
                 },
-                annotations={"readOnlyHint": True, "openWorldHint": False},
+                annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=False),
             )
         )
 
-    logger.debug(f"Collected {len(tools)} tools")
+    logger.debug("Collected %d tools", len(tools))
     return tools
 
 
@@ -258,7 +258,7 @@ async def handle_tool_call(
     """Handle all tool calls using the tool registry pattern."""
 
     try:
-        logger.debug(f"handling tool '{name}' with args {arguments}")
+        logger.debug("handling tool '%s' with args %s", name, arguments)
 
         # Validate tool exists and has required parameters
         validate_tool_arguments(name, arguments)
@@ -271,7 +271,7 @@ async def handle_tool_call(
         response = await handler(arguments)
 
     except Exception as e:
-        logger.error(f"Error handling tool call '{name}': {arguments}", exc_info=True)
+        logger.error("Error handling tool call '%s': %s", name, arguments, exc_info=True)
         response = json.dumps({"error": f"Error handling tool call '{name}': {str(e)}"})
 
     return to_text_context(response)
@@ -282,9 +282,8 @@ async def execute_sql_statement(dbname: str, query: str, read_only: bool) -> str
     Supports both PostgreSQL and SQL Server databases.
     If flag read_only is true, a read_only connection is used
     """
-    logger.info(f"Executing SQL query: {query}")
+    logger.info("Executing SQL query: %s", query)
 
-    conn = None
     try:
         async with db_connection_context(dbname, config, read_only) as conn:
             logger.info("Database connection established.")
@@ -295,10 +294,11 @@ async def execute_sql_statement(dbname: str, query: str, read_only: bool) -> str
             if vendor == "postgresql":
                 # PostgreSQL execution
                 if read_only:
-                    # exexute select
+                    # execute select
                     result = await conn.fetch(query)
                     logger.info(
-                        f"Query executed successfully on PostgreSQL. Fetched {len(result)} records."
+                        "Query executed successfully on PostgreSQL. Fetched %d records.",
+                        len(result),
                     )
                     result_dict = [dict(record) for record in result]
                 else:
@@ -306,7 +306,8 @@ async def execute_sql_statement(dbname: str, query: str, read_only: bool) -> str
                     async with conn.transaction():
                         result = await conn.execute(query)
                     logger.info(
-                        f"Statement executed successfully on PostgreSQL. Status: {result}"
+                        "Statement executed successfully on PostgreSQL. Status: %s",
+                        result,
                     )
                     result_dict = {
                         "status": result,
@@ -318,12 +319,13 @@ async def execute_sql_statement(dbname: str, query: str, read_only: bool) -> str
                 await cursor.execute(query)
 
                 if read_only:
-                    # collect result seet
+                    # collect result set
                     columns = [column[0] for column in cursor.description]
                     rows = await cursor.fetchall()
                     result_dict = [dict(zip(columns, row)) for row in rows]
                     logger.info(
-                        f"Query executed successfully on SQL Server. Fetched {len(rows)} records."
+                        "Query executed successfully on SQL Server. Fetched %d records.",
+                        len(rows),
                     )
                 else:
                     # get number of affected rows
@@ -334,7 +336,8 @@ async def execute_sql_statement(dbname: str, query: str, read_only: bool) -> str
                         "message": "Statement executed successfully",
                     }
                     logger.info(
-                        f"Statement executed successfully on SQL Server. Affected {affected_rows} rows."
+                        "Statement executed successfully on SQL Server. Affected %d rows.",
+                        affected_rows,
                     )
 
                 await cursor.close()
@@ -342,10 +345,10 @@ async def execute_sql_statement(dbname: str, query: str, read_only: bool) -> str
             else:
                 return json.dumps({"error": f"Unsupported database vendor: {vendor}"})
 
-            logger.debug(f"Result of query {query}: {result_dict}")
+            logger.debug("Result of query %s: %s", query, result_dict)
             return json.dumps(result_dict, cls=CustomJSONEncoder)
     except Exception as e:
-        logger.error(f"Error executing SQL query: {e}", exc_info=True)
+        logger.error("Error executing SQL query: %s", e, exc_info=True)
         return json.dumps({"error": str(e)})
 
 
@@ -360,9 +363,9 @@ async def http_get_request(url: str, headers: dict = None) -> str:
     Returns:
         str: A JSON string containing the response status, headers, and body, or an error message.
     """
-    logger.info(f"Making GET request to: {url}")
+    logger.info("Making GET request to: %s", url)
     if url.startswith("http://"):
-        logger.error(f"Invalid URL: {url}. URL must start with 'https://'.")
+        logger.error("Invalid URL: %s. URL must start with 'https://'.", url)
         return json.dumps({"error": "Invalid URL. Must start with 'https://'."})
 
     try:
@@ -376,7 +379,7 @@ async def http_get_request(url: str, headers: dict = None) -> str:
             }
             return json.dumps(result, cls=CustomJSONEncoder)
     except Exception as e:
-        logger.error(f"Unexpected error in http_get_request: {e}", exc_info=True)
+        logger.error("Unexpected error in http_get_request: %s", e, exc_info=True)
         return json.dumps({"error": f"Unexpected server error: {str(e)}"})
 
 
@@ -387,7 +390,7 @@ async def web_search(query: str) -> str:
     )
     MAX_RESULTS_TO_RETURN = 5
     MAX_RESULT_LENGTH = 10000
-    logger.info(f"Executing web query: {query}")
+    logger.info("Executing web query: %s", query)
     url = config["braveSearch"]["apiUrl"]
     brave_api_key = config["braveSearch"]["apiKey"]
     if not brave_api_key:
@@ -410,28 +413,33 @@ async def web_search(query: str) -> str:
             meta["error"] = "Missing URL in search result"
             return meta
         try:
-            logger.info(f"Fetching content from: {meta['url']}")
+            logger.info("Fetching content from: %s", meta["url"])
             async with http_client_context() as client:
                 response = await client.get(meta["url"])
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "").lower()
                 if "text/html" in content_type:
-                    # markdown converterer is not as good as expected
+                    # markdown converter is not as good as expected
                     # text = html_to_markdown(response.content)
                     text = strip_text_from_html(response.content)
                     meta["content"] = text[:MAX_RESULT_LENGTH]
                     logger.info(
-                        f"Successfully fetched and processed content from {meta['url']}"
+                        "Successfully fetched and processed content from %s",
+                        meta["url"],
                     )
                 else:
                     logger.warning(
-                        f"Skipping non-HTML content ({content_type}) from {meta['url']}"
+                        "Skipping non-HTML content (%s) from %s",
+                        content_type,
+                        meta["url"],
                     )
                     meta["error"] = f"Skipped non-HTML content ({content_type})"
                 return meta
         except Exception as e:
             logger.error(
-                f"Failed to fetch or process {meta.get('url', 'unknown URL')}: {e}",
+                "Failed to fetch or process %s: %s",
+                meta.get("url", "unknown URL"),
+                e,
                 exc_info=True,
             )
             meta["error"] = f"General error: {str(e)}"
@@ -439,7 +447,11 @@ async def web_search(query: str) -> str:
 
     try:
         async with http_client_context() as client:
-            logger.info(f"Sending request to Brave API ({url}) with query: '{query}'")
+            logger.info(
+                "Sending request to Brave API (%s) with query: '%s'",
+                url,
+                query,
+            )
             response = await client.get(url, params=params, headers=headers)
             response.raise_for_status()
             json_response = response.json()
@@ -448,19 +460,18 @@ async def web_search(query: str) -> str:
             metas = []
             results = json_response.get("web", {}).get("results", [])
             if not results:
-                logger.warning(f"No web results found for query: '{query}'")
+                logger.warning("No web results found for query: '%s'", query)
 
             for result in results:
                 if url := result.get("url"):
-                    meta = {"url": url}
-                    meta["description"] = strip_strong_tags(
-                        result.get("description", "No description available.")
-                    )
+                    meta = {"url": url, "description": strip_strong_tags(
+                      result.get("description", "No description available.")
+                    )}
                     metas.append(meta)
                 else:
-                    logger.warning(f"Search result missing 'url': {result}")
+                    logger.warning("Search result missing 'url': %s", result)
 
-            logger.info(f"Extracted {len(metas)} URLs to fetch content from.")
+            logger.info("Extracted %d URLs to fetch content from.", len(metas))
             findings = (
                 await asyncio.gather(*[fetch_url_content(meta) for meta in metas])
                 if metas
@@ -475,7 +486,7 @@ async def web_search(query: str) -> str:
             )
 
     except Exception as e:
-        logger.error(f"An unexpected error occurred in query_web: {e}", exc_info=True)
+        logger.error("An unexpected error occurred in query_web: %s", e, exc_info=True)
         return json.dumps({"error": f"Unexpected server error: {str(e)}"})
 
 
@@ -508,7 +519,7 @@ async def open_in_browser(url: str) -> str:
         )
         return "Browser successfully opened"
     except Exception as e:
-        logger.error(f"Error opening url in browser: {e}", exc_info=True)
+        logger.error("Error opening url in browser: %s", e, exc_info=True)
         return f"Error: {str(e)}"
 
 
@@ -539,12 +550,12 @@ async def get_source(class_name: str) -> str:
     # to download all source jars, use 'mvn dependency:sources'
     zip_path = get_companion_path(build_tool, jar_path, "sources")
     if zip_path is not None:
-        # Convert class name to path (com.example.MyClass → com/example/MyClass.html)
+        # Convert class name to path (com.example.MyClass → com/example/MyClass.java)
         java_file = class_name.replace(".", "/") + ".java"
         content = get_content_from_zip(zip_path, java_file)
         if content is None:
             return f"Error: No doc file for {java_file} found in {zip_path}"
-        logger.info(f"Found Java source in sources jar {zip_path}")
+        logger.info("Found Java source in sources jar %s", zip_path)
         return content
 
     # fallback: decompile
@@ -614,24 +625,24 @@ async def cleanup():
 if __name__ == "__main__":
     # Parse command-line arguments
     args = parse_arguments()
-    logger.info(f"Command-line arguments: {args}")
+    logger.info("Command-line arguments: %s", args)
 
     # Load config at startup
     try:
-        with open(configPath, "r") as file:
+        with open(configPath, "r", encoding="utf-8") as file:
             config = yaml.safe_load(file)
         # Set DB Name of Database to connect to
-        if not args.db_name is None:
+        if args.db_name is not None:
             config["dbName"] = args.db_name
         # Set current workspace foldername
-        if not args.project_folder is None:
+        if args.project_folder is not None:
             config["projectFolder"] = args.project_folder
         # Set Java build tool
-        if not args.build_tool is None:
+        if args.build_tool is not None:
             config["buildTool"] = args.build_tool
-        logger.info(f"Successfully loaded server configuration {config}")
+        logger.info("Successfully loaded server configuration %s", config)
     except Exception as e:
-        logger.error(f"Failed to load config: {e}", exc_info=True)
+        logger.error("Failed to load config: %s", e, exc_info=True)
         config = {}
 
     asyncio.run(run())

@@ -11,8 +11,6 @@ _db_pools = {}
 
 async def get_db_pool(dbname: str, config: dict, read_only: bool):
     """Get or create a shared database connection pool based on vendor type."""
-    global _db_pools
-
     poolname, access_level = get_poolname(dbname, read_only)
 
     if poolname not in _db_pools:
@@ -60,30 +58,30 @@ async def db_connection_context(dbname: str, config: dict, read_only: bool):
     """Context manager for database operations using connection pool."""
     conn = None
     try:
-        vendor = config["database"][dbname].get("vendor", "postgresql").lower()
         pool = await get_db_pool(dbname, config, read_only)
 
         conn = await pool.acquire()
         yield conn
     except Exception as e:
-        logger.error(f"Database error: {e}", exc_info=True)
+        logger.error("Database error: %s", e, exc_info=True)
         raise
     finally:
         if conn:
             # Release connection back to pool
-            if conn:
-                poolname, _ = get_poolname(dbname, read_only)
-                pool = _db_pools.get(poolname)
-                if pool:
-                    await pool.release(conn)
+            poolname, _ = get_poolname(dbname, read_only)
+            pool = _db_pools.get(poolname)
+            if pool:
+                await pool.release(conn)
 
 
 async def close_db_pool():
     """Close all database connection pools."""
-    global _db_pools
     for _, pool in _db_pools.items():
-        await pool.close()
-    _db_pools = {}
+        try:
+            await pool.close()
+        except Exception as e:
+            logger.error("Error closing database pool: %s", e, exc_info=True)
+    _db_pools.clear()
 
 def get_poolname(dbname: str, read_only: bool) -> tuple[str, str]:
     if read_only:
@@ -93,5 +91,3 @@ def get_poolname(dbname: str, read_only: bool) -> tuple[str, str]:
     poolname = f"{dbname}_{access_level}"
 
     return poolname, access_level
-
-   

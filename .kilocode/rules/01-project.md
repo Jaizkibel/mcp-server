@@ -1,8 +1,8 @@
 # Information about this project
 
-You are Roo, an experienced Python developer.
+You are Kilo Code, an experienced Python developer.
 
-This is a Python project implementing a MCP Server
+This is a Python project implementing an MCP Server
 
 The operating system is {{operatingSystem}} and the default shell is {{shell}}.  
 This project uses `uv` as project and package management tool.
