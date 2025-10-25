@@ -13,11 +13,7 @@ async def get_db_pool(dbname: str, config: dict, read_only: bool):
     """Get or create a shared database connection pool based on vendor type."""
     global _db_pools
 
-    if read_only:
-        access_level = "readonly"
-    else:
-        access_level = "full"
-    poolname = f"${dbname}_${access_level}"
+    poolname, access_level = get_poolname(dbname, read_only)
 
     if poolname not in _db_pools:
         vendor = config["database"][dbname].get("vendor", "postgresql").lower()
@@ -76,7 +72,8 @@ async def db_connection_context(dbname: str, config: dict, read_only: bool):
         if conn:
             # Release connection back to pool
             if conn:
-                pool = _db_pools.get(dbname)
+                poolname, _ = get_poolname(dbname, read_only)
+                pool = _db_pools.get(poolname)
                 if pool:
                     await pool.release(conn)
 
@@ -84,6 +81,17 @@ async def db_connection_context(dbname: str, config: dict, read_only: bool):
 async def close_db_pool():
     """Close all database connection pools."""
     global _db_pools
-    for dbname, pool in _db_pools.items():
+    for _, pool in _db_pools.items():
         await pool.close()
     _db_pools = {}
+
+def get_poolname(dbname: str, read_only: bool) -> tuple[str, str]:
+    if read_only:
+        access_level = "readonly"
+    else:
+        access_level = "full"
+    poolname = f"{dbname}_{access_level}"
+
+    return poolname, access_level
+
+   
