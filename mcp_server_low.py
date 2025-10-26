@@ -44,9 +44,10 @@ config = {}
 
 
 @asynccontextmanager
-async def server_lifespan(server: Server) -> AsyncIterator[dict]:
+async def server_lifespan(_: Server) -> AsyncIterator[dict]:
     """Manage server startup and shutdown lifecycle."""
     # Minimal implementation that yields empty dict
+    # Server parameter is not used here
     try:
         yield {}
     finally:
