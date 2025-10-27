@@ -72,13 +72,46 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         db_name = "musiciandb"
         # insert 1 row
         result = await execute_sql_statement(
-            db_name, "insert into musician.band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')", read_only=False
+            db_name, "insert into band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')", read_only=False
         )
         self.assertIsNotNone(result)
         self.assertEqual(result, '{"status": "INSERT 0 1", "message": "Statement executed successfully"}')
         # dete it again
         result = await execute_sql_statement(
-            db_name, "delete from musician.band where name = 'Beatles'", read_only=False
+            db_name, "delete from band where name = 'Beatles'", read_only=False
+        )
+        self.assertEqual(result, '{"status": "DELETE 1", "message": "Statement executed successfully"}')
+
+    #@unittest.skip("needs sql server docker running")
+    async def test_sqlserver_selects(self):
+        db_name = "portaldb"
+        result = await execute_sql_statement(
+            db_name, "SELECT 2 + 2 as result", read_only=True
+        )
+        self.assertEqual(result, '[{"result": 4}]')
+
+        result = await execute_sql_statement(
+            db_name, "SELECT NOW() as result", read_only=True
+        )
+        self.assertTrue(result.startswith('[{"result": "'))
+
+        result = await execute_sql_statement(
+            db_name, "SELECT 1.23456789 as result", read_only=True
+        )
+        self.assertEqual(result, '[{"result": 1.23456789}]')
+
+    @unittest.skip("needs sql server docker running")
+    async def test_sqlserver_changes(self):
+        db_name = "portaldb"
+        # insert 1 row
+        result = await execute_sql_statement(
+            db_name, "insert into band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')", read_only=False
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result, '{"status": "INSERT 0 1", "message": "Statement executed successfully"}')
+        # dete it again
+        result = await execute_sql_statement(
+            db_name, "delete from band where name = 'Beatles'", read_only=False
         )
         self.assertEqual(result, '{"status": "DELETE 1", "message": "Statement executed successfully"}')
 

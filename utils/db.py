@@ -8,15 +8,18 @@ logger = logging.getLogger(__name__)
 # Global database connection pools
 _db_pools = {}
 
+ACCESS_FULL = "full"
+ACCESS_READONLY = "readonly"
+
 
 async def get_db_pool(dbname: str, config: dict, read_only: bool):
     """Get or create a shared database connection pool based on vendor type."""
     global _db_pools
 
     if read_only:
-        access_level = "readonly"
+        access_level = ACCESS_READONLY
     else:
-        access_level = "full"
+        access_level = ACCESS_FULL
     poolname = f"${dbname}_${access_level}"
 
     if poolname not in _db_pools:
@@ -42,16 +45,18 @@ async def get_db_pool(dbname: str, config: dict, read_only: bool):
                 f"DRIVER={{ODBC Driver 18 for SQL Server}};"
                 f"SERVER={config['database'][dbname]['host']},{config['database'][dbname]['port']};"
                 f"DATABASE={config['database'][dbname]['dbname']};"
-                f"UID={config['database'][dbname]['username']};"
-                f"PWD={config['database'][dbname]['password']};"
+                f"UID={config['database'][dbname][access_level]['username']};"
+                f"PWD={config['database'][dbname][access_level]['password']};"
                 f"TrustServerCertificate=yes;"  # Added to ignore certificate verification errors
+                f"Connection Timeout=10;"  # Added to extend connection timeout to 30 seconds
             )
 
             _db_pools[poolname] = await aioodbc.create_pool(
                 dsn=dsn,
                 minsize=config["database"]["min_size"],
                 maxsize=config["database"]["max_size"],
-                autocommit=False,
+                autocommit=True,
+                timeout=10,  # Pool connection timeout in seconds
             )
         else:
             raise ValueError(f"Unsupported database vendor: {vendor}")
@@ -63,8 +68,9 @@ async def get_db_pool(dbname: str, config: dict, read_only: bool):
 async def db_connection_context(dbname: str, config: dict, read_only: bool):
     """Context manager for database operations using connection pool."""
     conn = None
+
+    poolname = f"${dbname}_{ACCESS_READONLY if read_only else ACCESS_FULL}"
     try:
-        vendor = config["database"][dbname].get("vendor", "postgresql").lower()
         pool = await get_db_pool(dbname, config, read_only)
 
         conn = await pool.acquire()
@@ -76,7 +82,7 @@ async def db_connection_context(dbname: str, config: dict, read_only: bool):
         if conn:
             # Release connection back to pool
             if conn:
-                pool = _db_pools.get(dbname)
+                pool = _db_pools.get(poolname)
                 if pool:
                     await pool.release(conn)
 
