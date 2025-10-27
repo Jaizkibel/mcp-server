@@ -74,8 +74,6 @@ async def db_connection_context(dbname: str, config: dict, read_only: bool):
         raise
     finally:
         if conn:
-            # Release connection back to pool
-            poolname, _ = get_poolname(dbname, read_only)
             pool = _db_pools.get(poolname)
             if pool:
                 await pool.release(conn)

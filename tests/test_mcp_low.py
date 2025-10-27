@@ -94,7 +94,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNotNone(result)
         self.assertEqual(result, '{"status": "INSERT 0 1", "message": "Statement executed successfully"}')
-        # dete it again
+        # delete it again
         result = await execute_sql_statement(
             db_name, "delete from band where name = 'Beatles'", read_only=False
         )
@@ -127,7 +127,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNotNone(result)
         self.assertEqual(result, '{"status": "INSERT 0 1", "message": "Statement executed successfully"}')
-        # dete it again
+        # delete it again
         result = await execute_sql_statement(
             db_name, "delete from band where name = 'Beatles'", read_only=False
         )
