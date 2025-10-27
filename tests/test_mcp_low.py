@@ -100,7 +100,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result, '{"status": "DELETE 1", "message": "Statement executed successfully"}')
 
-    #@unittest.skip("needs sql server docker running")
+    @unittest.skip("needs sql server docker running")
     async def test_sqlserver_selects(self):
         db_name = "portaldb"
         result = await execute_sql_statement(
