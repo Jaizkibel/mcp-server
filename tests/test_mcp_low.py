@@ -50,6 +50,24 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         tools = await list_tools()
         self.assertEqual(len(tools), 7)
 
+    @unittest.skip("no sql odbc driver installed")
+    async def test_sqlserver_selects(self):
+        db_name = "musiciandb_ss"
+        result = await execute_sql_statement(
+            db_name, "SELECT 2 + 2 as result", read_only=True
+        )
+        self.assertEqual(result, '[{"result": 4}]')
+
+        result = await execute_sql_statement(
+            db_name, "SELECT NOW() as result", read_only=True
+        )
+        self.assertTrue(result.startswith('[{"result": "'))
+
+        result = await execute_sql_statement(
+            db_name, "SELECT 1.23456789 as result", read_only=True
+        )
+        self.assertEqual(result, '[{"result": 1.23456789}]')
+
     async def test_postgres_selects(self):
         db_name = "musiciandb"
         result = await execute_sql_statement(
