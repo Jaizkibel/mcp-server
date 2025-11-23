@@ -179,12 +179,13 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
-    @unittest.skip("Source test disabled: Needs existing Gradle Project")
+    # @unittest.skip("Source test disabled: Needs existing Gradle Project")
     async def test_source_gradle(self):
+        config["projectFolder"] = "/home/kruese/IdeaProjects/github/spring-cloud-kubernetes-leader-example"
         config["buildTool"] = "gradle"
         # path to gradle project required
-        config["projectFolder"] = testConfig.get("gradleProjectPath")
-        code = await get_source("com.zaxxer.hikari.HikariDataSource")
+        # config["projectFolder"] = testConfig.get("gradleProjectPath")
+        code = await get_source("io.fabric8.kubernetes.client.extended.leaderelection.LeaderElector")
         # original source starts with comment
         self.assertTrue(code.startswith("/*\n"))
 

@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import json
 import logging
+import os
 from pathlib import Path
 import subprocess
 import asyncio
@@ -560,7 +561,7 @@ async def get_source(class_name: str) -> str:
         return content
 
     # fallback: decompile
-    return decompile_from_jar(class_name, jar_path, rootPath)
+    return decompile_from_jar(class_name, jar_path, rootPath, workspace_path)
 
 
 async def get_javadoc(class_name: str) -> str:
@@ -627,6 +628,9 @@ if __name__ == "__main__":
     # Parse command-line arguments
     args = parse_arguments()
     logger.info("Command-line arguments: %s", args)
+
+    env = os.environ.copy()
+    logger.info("Environment variables: %s", env)
 
     # Load config at startup
     try:

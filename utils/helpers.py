@@ -33,7 +33,7 @@ def handle_cmd_result(result: CompletedProcess) -> str:
 
 
 def get_maven_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
-    command = [build_tool, "dependency:build-classpath"]
+    command = [os.path.join(workspace_path, build_tool), "dependency:build-classpath"]
     logger.info(f"Executing '{' '.join(command)}'")
     result = subprocess.run(
         command,
@@ -66,8 +66,8 @@ def get_maven_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
 
 
 def get_gradle_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
-    command = [build_tool, "listAllJars"]
-    logger.info(f"Executing '{' '.join(command)}'")
+    command = [os.path.join(workspace_path, build_tool), "listAllJars"]
+    logger.info(f"Executing '{' '.join(command)}' in {workspace_path}")
     result = subprocess.run(
         command,
         cwd=workspace_path,
@@ -102,7 +102,9 @@ def find_jar_for_class(class_name: str, jar_paths: list) -> str:
     return matching_jar
 
 
-def decompile_from_jar(class_name: str, jar_path: str, root_path: Path) -> str:
+def decompile_from_jar(
+    class_name: str, jar_path: str, root_path: Path, workspace_path: str
+) -> str:
     """
     Decompiles a Java class from JAR files.
 
@@ -110,13 +112,14 @@ def decompile_from_jar(class_name: str, jar_path: str, root_path: Path) -> str:
         class_name: The full class name (e.g., 'com.example.MyClass')
         jar_paths: List of JAR file paths to search in
         root_path: Root path where the decompiler JAR is located
+        workspace_path: The path to the workspace
 
     Returns:
         The decompiled source code or an error message
     """
     decompiler_jar = root_path / "bin" / "jd-cli.jar"
     decompile_command = [
-        "java",
+        os.path.join(workspace_path, "java"),
         "-jar",
         str(decompiler_jar),
         "--outputConsole",
