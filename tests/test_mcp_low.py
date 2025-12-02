@@ -85,7 +85,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result,
                      '{"status": "DELETE 1", "message": "Statement executed successfully"}')
 
-  # @unittest.skip("needs sql server docker running")
+  @unittest.skip("needs sql server docker running")
   async def test_sqlserver_selects(self):
     db_name = "portaldb"
     result = await execute_sql_statement(
@@ -109,18 +109,18 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     # insert 1 row
     result = await execute_sql_statement(
         db_name,
-        "insert into band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')",
+        "insert into postbox.document_name (name, language, ui_display_value) values ('MCP_TEST', 'DE', 'Test')",
         read_only=False
     )
     self.assertIsNotNone(result)
     self.assertEqual(result,
-                     '{"status": "INSERT 0 1", "message": "Statement executed successfully"}')
+                     '{"affected_rows": 1, "message": "Statement executed successfully"}')
     # delete it again
     result = await execute_sql_statement(
-        db_name, "delete from band where name = 'Beatles'", read_only=False
+        db_name, "delete from postbox.document_name where name = 'MCP_TEST'", read_only=False
     )
     self.assertEqual(result,
-                     '{"status": "DELETE 1", "message": "Statement executed successfully"}')
+                     '{"affected_rows": 1, "message": "Statement executed successfully"}')
 
   @unittest.skip("Browser test disabled - requires manual interaction")
   async def test_open_in_browser(self):
@@ -168,7 +168,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
     self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
-  # @unittest.skip("Source test disabled: Needs existing Gradle Project")
+  @unittest.skip("Source test disabled: Needs existing Gradle Project")
   async def test_source_gradle(self):
     config[
       "projectFolder"] = "/home/kruese/IdeaProjects/github/spring-cloud-kubernetes-leader-example"
