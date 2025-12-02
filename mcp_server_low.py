@@ -286,72 +286,101 @@ async def execute_sql_statement(dbname: str, query: str, read_only: bool) -> str
     """
     logger.info("Executing SQL query: %s", query)
 
-    try:
-        async with db_connection_context(dbname, config, read_only) as conn:
-            logger.info("Database connection established.")
+    # Retry logic to handle stale connections (especially for SQL Server)
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            async with db_connection_context(dbname, config, read_only) as conn:
+                logger.info("Database connection established.")
 
-            # Determine database vendor
-            vendor = config["database"][dbname].get("vendor", "postgresql").lower()
+                # Determine database vendor
+                vendor = config["database"][dbname].get("vendor", "postgresql").lower()
 
-            if vendor == "postgresql":
-                # PostgreSQL execution
-                if read_only:
-                    # execute select
-                    result = await conn.fetch(query)
-                    logger.info(
-                        "Query executed successfully on PostgreSQL. Fetched %d records.",
-                        len(result),
-                    )
-                    result_dict = [dict(record) for record in result]
+                if vendor == "postgresql":
+                    # PostgreSQL execution
+                    if read_only:
+                        # execute select
+                        result = await conn.fetch(query)
+                        logger.info(
+                            "Query executed successfully on PostgreSQL. Fetched %d records.",
+                            len(result),
+                        )
+                        result_dict = [dict(record) for record in result]
+                    else:
+                        # execute insert/update/delete and get status with explicit transaction
+                        async with conn.transaction():
+                            result = await conn.execute(query)
+                        logger.info(
+                            "Statement executed successfully on PostgreSQL. Status: %s",
+                            result,
+                        )
+                        result_dict = {
+                            "status": result,
+                            "message": "Statement executed successfully",
+                        }
+
+                elif vendor == "sqlserver":
+                    cursor = await conn.cursor()
+                    await cursor.execute(query)
+
+                    if read_only:
+                        # collect result set
+                        columns = [column[0] for column in cursor.description]
+                        rows = await cursor.fetchall()
+                        result_dict = [dict(zip(columns, row)) for row in rows]
+                        logger.info(
+                            "Query executed successfully on SQL Server. Fetched %d records.",
+                            len(rows),
+                        )
+                    else:
+                        # get number of affected rows
+                        affected_rows = cursor.rowcount
+                        await conn.commit()  # Commit the transaction
+                        result_dict = {
+                            "affected_rows": affected_rows,
+                            "message": "Statement executed successfully",
+                        }
+                        logger.info(
+                            "Statement executed successfully on SQL Server. Affected %d rows.",
+                            affected_rows,
+                        )
+
+                    await cursor.close()
+
                 else:
-                    # execute insert/update/delete and get status with explicit transaction
-                    async with conn.transaction():
-                        result = await conn.execute(query)
-                    logger.info(
-                        "Statement executed successfully on PostgreSQL. Status: %s",
-                        result,
-                    )
-                    result_dict = {
-                        "status": result,
-                        "message": "Statement executed successfully",
-                    }
+                    return json.dumps({"error": f"Unsupported database vendor: {vendor}"})
 
-            elif vendor == "sqlserver":
-                cursor = await conn.cursor()
-                await cursor.execute(query)
+                logger.debug("Result of query %s: %s", query, result_dict)
+                return json.dumps(result_dict, cls=CustomJSONEncoder)
 
-                if read_only:
-                    # collect result set
-                    columns = [column[0] for column in cursor.description]
-                    rows = await cursor.fetchall()
-                    result_dict = [dict(zip(columns, row)) for row in rows]
-                    logger.info(
-                        "Query executed successfully on SQL Server. Fetched %d records.",
-                        len(rows),
-                    )
-                else:
-                    # get number of affected rows
-                    affected_rows = cursor.rowcount
-                    await conn.commit()  # Commit the transaction
-                    result_dict = {
-                        "affected_rows": affected_rows,
-                        "message": "Statement executed successfully",
-                    }
-                    logger.info(
-                        "Statement executed successfully on SQL Server. Affected %d rows.",
-                        affected_rows,
-                    )
+        except Exception as e:
+            # Check if this is a connection error that we should retry
+            error_msg = str(e).lower()
+            is_connection_error = any(keyword in error_msg for keyword in [
+                'connection is broken',
+                'connection reset',
+                'connection closed',
+                'connection timeout',
+                'imc06',  # SQL Server specific error code for broken connection
+                'communication link failure'
+            ])
 
-                await cursor.close()
-
+            if is_connection_error and attempt < max_retries - 1:
+                logger.warning(
+                    "Connection error on attempt %d/%d: %s. Retrying...",
+                    attempt + 1,
+                    max_retries,
+                    e
+                )
+                # Close and recreate the pool to ensure fresh connections
+                await close_db_pool()
+                continue
             else:
-                return json.dumps({"error": f"Unsupported database vendor: {vendor}"})
+                logger.error("Error executing SQL query: %s", e, exc_info=True)
+                return json.dumps({"error": str(e)})
 
-            logger.debug("Result of query %s: %s", query, result_dict)
-            return json.dumps(result_dict, cls=CustomJSONEncoder)
-    except Exception as e:
-        logger.error("Error executing SQL query: %s", e, exc_info=True)
-        return json.dumps({"error": str(e)})
+    # Should never reach here, but just in case
+    return json.dumps({"error": "Max retries exceeded"})
 
 
 async def http_get_request(url: str, headers: dict = None) -> str:
