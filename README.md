@@ -6,7 +6,7 @@ Be aware that this README is mostly written by AI.
 
 ## Installation
 
-1. Make sure you have Python 3.12+ installed
+1. Make sure you have Python 3.14+ installed
 2. Clone this repository
 3. Install the dependencies:
 
