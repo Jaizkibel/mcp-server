@@ -85,7 +85,7 @@ def html_to_markdown(html_content: bytes) -> str:
         decoded_html: str = html_content.decode('utf-8')
         return md(decoded_html, strip_document=STRIP)
     except Exception as e:
-        logger.error(f"Error conerting HTML to markdown: {e}", exc_info=True)
+        logger.error(f"Error converting HTML to markdown: {e}", exc_info=True)
         return "Error processing HTML content" 
 
 def strip_strong_tags(text: str) -> str:

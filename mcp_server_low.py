@@ -415,12 +415,11 @@ async def http_get_request(url: str, headers: dict = None) -> str:
 
 
 async def web_search(query: str) -> str:
-    """Executes a search query using the Brave Search API and fetches content from the 3 top results"""
-    MAX_SEARCH_RESULTS = (
-        10  # higher than number of results to return because request may fail
-    )
-    MAX_RESULTS_TO_RETURN = 5
-    MAX_RESULT_LENGTH = 10000
+    """Executes a search query using the Brave Search API and fetches content
+    from the 3 top results"""
+    max_search_results = 10  # higher than number of results to return because request may fail
+    max_results_to_return = 5
+    max_result_length = 10000
     logger.info("Executing web query: %s", query)
     url = config["braveSearch"]["apiUrl"]
     brave_api_key = config["braveSearch"]["apiKey"]
@@ -435,7 +434,7 @@ async def web_search(query: str) -> str:
         "Accept-Encoding": "gzip",
         "X-Subscription-Token": brave_api_key,
     }
-    params = {"result_filter": "web", "count": MAX_SEARCH_RESULTS, "q": query}
+    params = {"result_filter": "web", "count": max_search_results, "q": query}
 
     async def fetch_url_content(meta: dict) -> dict:
         """Helper function to fetch content for a single URL."""
@@ -450,10 +449,10 @@ async def web_search(query: str) -> str:
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "").lower()
                 if "text/html" in content_type:
-                    # markdown converter is not as good as expected
+                    # Markdown converter is not as good as expected
                     # text = html_to_markdown(response.content)
                     text = strip_text_from_html(response.content)
-                    meta["content"] = text[:MAX_RESULT_LENGTH]
+                    meta["content"] = text[:max_result_length]
                     logger.info(
                         "Successfully fetched and processed content from %s",
                         meta["url"],
@@ -513,7 +512,7 @@ async def web_search(query: str) -> str:
             logger.info("Finished fetching content for all URLs.")
             # do only return the most relevant findings
             return json.dumps(
-                filtered_findings[:MAX_RESULTS_TO_RETURN], cls=CustomJSONEncoder
+                filtered_findings[:max_results_to_return], cls=CustomJSONEncoder
             )
 
     except Exception as e:

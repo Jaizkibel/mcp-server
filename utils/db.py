@@ -20,7 +20,7 @@ async def get_db_pool(dbname: str, config: dict, read_only: bool):
         vendor = config["database"][dbname].get("vendor", "postgresql").lower()
 
         if vendor == "postgresql":
-            _db_pools[poolname] = await asyncpg.create_pool(
+            _db_pools[poolname] = asyncpg.create_pool(
                 user=config["database"][dbname][access_level]["username"],
                 password=config["database"][dbname][access_level]["password"],
                 database=config["database"][dbname]["dbname"],
