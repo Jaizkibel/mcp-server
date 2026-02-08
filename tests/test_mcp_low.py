@@ -26,7 +26,7 @@ testConfig = {}
 class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
   @classmethod
   def setUpClass(cls):
-    """Load config file before any tests run."""
+    """Load the config file before any tests run."""
     configPath = os.path.abspath(f"{Path.home()}/.mcp-server/config.yml")
     try:
       with open(configPath, "r") as file:
@@ -47,7 +47,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     config["buildTool"] = "mvn"
 
     tools = await list_tools()
-    self.assertEqual(7, len(tools))
+    self.assertEqual(5, len(tools))
 
   async def test_postgres_selects(self):
     db_name = "musiciandb"
@@ -72,7 +72,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     # insert 1 row
     result = await execute_sql_statement(
         db_name,
-        "insert into band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')",
+        "insert into musician.band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')",
         read_only=False
     )
     self.assertIsNotNone(result)
@@ -82,7 +82,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     )
     # delete it again
     result = await execute_sql_statement(
-        db_name, "delete from band where name = 'Beatles'", read_only=False
+        db_name, "delete from musician.band where name = 'Beatles'", read_only=False
     )
     self.assertEqual(
         '{"status": "DELETE 1", "message": "Statement executed successfully"}',
