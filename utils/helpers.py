@@ -15,7 +15,7 @@ def init_logging(log_directory: str, file_name: str):
         os.makedirs(log_directory)
 
     logging.basicConfig(
-        filename=os.path.join("log", "mcp_server_low.log"),
+        filename=os.path.join("log", file_name),
         level=logging.DEBUG,
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
@@ -40,6 +40,7 @@ def get_maven_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
         cwd=workspace_path,
         text=True,
         capture_output=True,
+        check=False
     )
     # result: full jar paths separated by ':', with gradle logging output
     if result.returncode != 0:
@@ -73,6 +74,7 @@ def get_gradle_jar(build_tool: str, class_name: str, workspace_path: str) -> str
         cwd=workspace_path,
         text=True,
         capture_output=True,
+        check=False
     )
     # result: full jar paths, each in different line, with gradle logging output
     if result.returncode != 0:
@@ -133,6 +135,7 @@ def decompile_from_jar(
         cwd=root_path,
         text=True,
         capture_output=True,
+        check=False
     )
     if result.returncode != 0:
         logger.error(f"Java decompile command failed: {result.stderr}")
@@ -215,7 +218,7 @@ def find_file_in_folder(root_dir: str, file_name: str) -> str:
 
 def has_item_in_section(config: dict, section_name: str, item_name: str) -> bool:
     if section_name in config:
-        for db_name, sub_config in config[section_name].items():
+        for _, sub_config in config[section_name].items():
             # Skip pool configuration items (min_size, max_size, etc.)
             if isinstance(sub_config, dict) and item_name in sub_config:
                 return True

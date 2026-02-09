@@ -12,25 +12,26 @@ logger = logging.getLogger(__name__)
 
 _http_client = None
 
+
 # Custom JSON encoder to handle Decimal and datetime objects
 class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return float(obj)
-        elif isinstance(obj, (datetime.datetime, datetime.date)):
-            return obj.isoformat()
-        return super().default(obj)
+    def default(self, o):
+        if isinstance(o, Decimal):
+            return float(o)
+        elif isinstance(o, (datetime.datetime, datetime.date)):
+            return o.isoformat()
+        return super().default(o)
 
-            
+
 async def get_http_client() -> httpx.AsyncClient:
     """Get or create a shared AsyncClient instance with connection pooling."""
     global _http_client
     if _http_client is None:
         _http_client = httpx.AsyncClient(
-            timeout=10.0,
-            verify=False  # Disables SSL certificate validation
+            timeout=10.0, verify=False  # Disables SSL certificate validation
         )
     return _http_client
+
 
 @asynccontextmanager
 async def http_client_context():
@@ -41,6 +42,7 @@ async def http_client_context():
     except Exception as e:
         logger.error(f"HTTP client error: {e}", exc_info=True)
         raise
+
 
 def strip_text_from_html(html_content: bytes) -> str:
     """Strips unwanted tags and extracts text from HTML content."""
@@ -79,14 +81,16 @@ def strip_text_from_html(html_content: bytes) -> str:
         logger.error(f"Error stripping HTML: {e}", exc_info=True)
         return "Error processing HTML content"
 
+
 def html_to_markdown(html_content: bytes) -> str:
     """converts html to markdown"""
     try:
-        decoded_html: str = html_content.decode('utf-8')
+        decoded_html: str = html_content.decode("utf-8")
         return md(decoded_html, strip_document=STRIP)
     except Exception as e:
         logger.error(f"Error converting HTML to markdown: {e}", exc_info=True)
-        return "Error processing HTML content" 
+        return "Error processing HTML content"
+
 
 def strip_strong_tags(text: str) -> str:
     """Strips <strong> tags from HTML content."""
@@ -96,11 +100,10 @@ def strip_strong_tags(text: str) -> str:
     new_text = text.replace("<strong>", "").replace("</strong>", "")
     return new_text
 
+
 async def close_http_client():
     """Close the shared HTTP client."""
     global _http_client
     if _http_client:
         await _http_client.aclose()
         _http_client = None
-
-
