@@ -166,9 +166,9 @@ def get_companion_path(build_tool: str, jar_path: str, suffix: str) -> str:
         if match:
             root_folder = match.group(1)
             file_name = match.group(3)
-        zip_path = find_file_in_folder(
-            root_folder, file_name.replace(".jar", f"-{suffix}.jar")
-        )
+            zip_path = find_file_in_folder(
+                root_folder, file_name.replace(".jar", f"-{suffix}.jar")
+            )
 
     return zip_path
 

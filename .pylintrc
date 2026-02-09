@@ -24,6 +24,7 @@ disable=
     W0212,  # Access to a protected member (needed for testing)
     W0223,  # Method abstract in ancestor not overridden (can be intentional)
     W0511,  # TODO/FIXME comments
+    W1203,  # use lazy formatting
     broad-except,  # Sometimes catching broad exceptions is necessary
     duplicate-code,  # Can be annoying in tests
 

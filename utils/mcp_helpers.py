@@ -10,11 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 def to_text_context(text: str) -> list[TextContent]:
-    """ convert text to list of TextContent needed as tool call return value"""
+    """convert text to list of TextContent needed as tool call return value"""
     # logger.debug(f"converting text '{text}' to list of TextContent")
     if text is None:
         text = "No text available"
     return [TextContent(type="text", text=text)]
+
 
 async def get_project_folder(server: Server, config: dict) -> str | None | Any:
     """Gets project directory from config.
@@ -23,7 +24,7 @@ async def get_project_folder(server: Server, config: dict) -> str | None | Any:
     config_path = config.get("projectFolder")
     if config_path is not None:
         return config_path
-    
+
     try:
         session: ServerSession = server.request_context.session
         caps: ClientCapabilities = session.client_params.capabilities
@@ -36,16 +37,15 @@ async def get_project_folder(server: Server, config: dict) -> str | None | Any:
             uri = roots.roots[0].uri
             logger.debug(f"root path: {uri.path}")
             return uri.path
-            
+
     except Exception as e:
         logger.error(f"Failed to list roots: {e}", exc_info=True)
         return None
-    
+
+
 def is_relative_path(path: str) -> bool:
     """Check if the given path is relative."""
     if path.startswith("http"):
         return False
 
     return not os.path.isabs(path)
-
-
