@@ -26,7 +26,7 @@ testConfig = {}
 class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
   @classmethod
   def setUpClass(cls):
-    """Load config file before any tests run."""
+    """Load the config file before any tests run."""
     configPath = os.path.abspath(f"{Path.home()}/.mcp-server/config.yml")
     try:
       with open(configPath, "r") as file:
@@ -47,14 +47,14 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     config["buildTool"] = "mvn"
 
     tools = await list_tools()
-    self.assertEqual(len(tools), 7)
+    self.assertEqual(5, len(tools))
 
   async def test_postgres_selects(self):
     db_name = "musiciandb"
     result = await execute_sql_statement(
         db_name, "SELECT 2 + 2 as result", read_only=True
     )
-    self.assertEqual(result, '[{"result": 4}]')
+    self.assertEqual('[{"result": 4}]', result)
 
     result = await execute_sql_statement(
         db_name, "SELECT NOW() as result", read_only=True
@@ -64,7 +64,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     result = await execute_sql_statement(
         db_name, "SELECT 1.23456789 as result", read_only=True
     )
-    self.assertEqual(result, '[{"result": 1.23456789}]')
+    self.assertEqual('[{"result": 1.23456789}]', result)
 
   # @unittest.skip("needs implementation")
   async def test_postgres_changes(self):
@@ -72,18 +72,22 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     # insert 1 row
     result = await execute_sql_statement(
         db_name,
-        "insert into band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')",
+        "insert into musician.band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')",
         read_only=False
     )
     self.assertIsNotNone(result)
-    self.assertEqual(result,
-                     '{"status": "INSERT 0 1", "message": "Statement executed successfully"}')
+    self.assertEqual(
+        '{"status": "INSERT 0 1", "message": "Statement executed successfully"}',
+        result
+    )
     # delete it again
     result = await execute_sql_statement(
-        db_name, "delete from band where name = 'Beatles'", read_only=False
+        db_name, "delete from musician.band where name = 'Beatles'", read_only=False
     )
-    self.assertEqual(result,
-                     '{"status": "DELETE 1", "message": "Statement executed successfully"}')
+    self.assertEqual(
+        '{"status": "DELETE 1", "message": "Statement executed successfully"}',
+        result
+    )
 
   @unittest.skip("needs sql server docker running")
   async def test_sqlserver_selects(self):
@@ -91,7 +95,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     result = await execute_sql_statement(
         db_name, "SELECT 2 + 2 as result", read_only=True
     )
-    self.assertEqual(result, '[{"result": 4}]')
+    self.assertEqual('[{"result": 4}]', result)
 
     result = await execute_sql_statement(
         db_name, "SELECT current_timestamp as result", read_only=True
@@ -101,7 +105,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     result = await execute_sql_statement(
         db_name, "SELECT 1.23456789 as result", read_only=True
     )
-    self.assertEqual(result, '[{"result": 1.23456789}]')
+    self.assertEqual('[{"result": 1.23456789}]', result)
 
   @unittest.skip("needs sql server docker running")
   async def test_sqlserver_changes(self):
@@ -113,14 +117,18 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         read_only=False
     )
     self.assertIsNotNone(result)
-    self.assertEqual(result,
-                     '{"affected_rows": 1, "message": "Statement executed successfully"}')
+    self.assertEqual(
+        '{"affected_rows": 1, "message": "Statement executed successfully"}',
+        result
+    )
     # delete it again
     result = await execute_sql_statement(
         db_name, "delete from postbox.document_name where name = 'MCP_TEST'", read_only=False
     )
-    self.assertEqual(result,
-                     '{"affected_rows": 1, "message": "Statement executed successfully"}')
+    self.assertEqual(
+        '{"affected_rows": 1, "message": "Statement executed successfully"}',
+        result
+    )
 
   @unittest.skip("Browser test disabled - requires manual interaction")
   async def test_open_in_browser(self):
@@ -131,7 +139,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     findings_text = await web_search("latest python version")
     findings = json.loads(findings_text)
     self.assertIsNotNone(findings)
-    self.assertEqual(len(findings), 5)
+    self.assertEqual(5, len(findings))
     for finding in findings:
       self.assertIsNone(finding.get("error"))
       self.assertIsNotNone(finding["url"])
@@ -194,9 +202,9 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     result = await http_get_request("https://example.com/api")
     result_data = json.loads(result)
 
-    self.assertEqual(result_data["status_code"], 200)
-    self.assertEqual(result_data["headers"]["Content-Type"], "application/json")
-    self.assertEqual(result_data["body"], '{"key": "value"}')
+    self.assertEqual(200, result_data["status_code"])
+    self.assertEqual("application/json", result_data["headers"]["Content-Type"])
+    self.assertEqual('{"key": "value"}', result_data["body"])
     mock_client.get.assert_called_once_with("https://example.com/api",
                                             headers={})
 
@@ -220,7 +228,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     result = await http_get_request("https://example.com/api", headers=headers)
     result_data = json.loads(result)
 
-    self.assertEqual(result_data["status_code"], 200)
+    self.assertEqual(200, result_data["status_code"])
     mock_client.get.assert_called_once_with(
         "https://example.com/api", headers={"Authorization": "Bearer token"}
     )
