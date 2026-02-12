@@ -33,7 +33,8 @@ def handle_cmd_result(result: CompletedProcess) -> str:
 
 
 def get_maven_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
-    command = [os.path.join(workspace_path, build_tool), "dependency:build-classpath"]
+    # command = [os.path.join(workspace_path, build_tool), "dependency:build-classpath"]
+    command = [build_tool, "dependency:build-classpath"]
     logger.info(f"Executing '{' '.join(command)}'")
     result = subprocess.run(
         command,
@@ -121,7 +122,7 @@ def decompile_from_jar(
     """
     decompiler_jar = root_path / "bin" / "jd-cli.jar"
     decompile_command = [
-        os.path.join(workspace_path, "java"),
+        "java",
         "-jar",
         str(decompiler_jar),
         "--outputConsole",

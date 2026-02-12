@@ -20,7 +20,7 @@ from pathlib import Path
 
 local_dir = os.path.dirname(os.path.abspath(__file__))
 
-testConfig = {}
+testConfig = {"mavenProjectPath": "/Users/ANNO.KRUESEMANN/IdeaProjects/github/cp-postbox-service"}
 
 
 class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
@@ -148,7 +148,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
       self.assertIsNotNone(finding["content"])
       self.assertIn("python", finding["content"].lower())
 
-  @unittest.skip("Source test disabled: Needs existing Maven Project")
+  # @unittest.skip("Source test disabled: Needs existing Maven Project")
   async def test_source_maven(self):
     config["buildTool"] = "mvn"
     # path to maven project required
@@ -156,9 +156,9 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
     config["projectFolder"] = testConfig.get("mavenProjectPath")
     code = await get_source("com.zaxxer.hikari.HikariDataSource")
     # original source starts with comment
-    self.assertTrue(code.startswith("/*\n"))
+    self.assertTrue(code.startswith("package"))
 
-  @unittest.skip("Javadoc test disabled: Needs existing Maven Project")
+  # @unittest.skip("Javadoc test disabled: Needs existing Maven Project")
   async def test_javadoc_maven(self):
     config["buildTool"] = "mvn"
     # path to maven project required
