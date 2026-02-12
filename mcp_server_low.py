@@ -525,19 +525,19 @@ async def web_search(query: str) -> str:
                 else:
                     logger.warning("Search result missing 'url': %s", result)
 
-                logger.info("Extracted %d URLs to fetch content from.", len(metas))
-                findings = (
-                    await asyncio.gather(*[fetch_url_content(meta) for meta in metas])
-                    if metas
-                    else []
-                )
-                # remove errors
-                filtered_findings = [f for f in findings if f.get("error") is None]
-                logger.info("Finished fetching content for all URLs.")
-                # do only return the most relevant findings
-                return json.dumps(
-                    filtered_findings[:MAX_RESULTS_TO_RETURN], cls=CustomJSONEncoder
-                )
+            logger.info("Extracted %d URLs to fetch content from.", len(metas))
+            findings = (
+                await asyncio.gather(*[fetch_url_content(meta) for meta in metas])
+                if metas
+                else []
+            )
+            # remove errors
+            filtered_findings = [f for f in findings if f.get("error") is None]
+            logger.info("Finished fetching content for all URLs.")
+            # do only return the most relevant findings
+            return json.dumps(
+                filtered_findings[:MAX_RESULTS_TO_RETURN], cls=CustomJSONEncoder
+            )
 
     except Exception as e:
         logger.error("An unexpected error occurred in query_web: %s", e, exc_info=True)
