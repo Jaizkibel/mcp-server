@@ -5,7 +5,6 @@ import os
 from unittest.mock import patch, AsyncMock, MagicMock
 from mcp_server_low import (
     get_source,
-    execute_sql_statement,
     get_javadoc,
     http_get_request,
     config,
@@ -13,8 +12,6 @@ from mcp_server_low import (
     web_search,
     open_in_browser,
 )
-import datetime
-import requests
 from httpx import Response
 from pathlib import Path
 
@@ -50,88 +47,6 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         tools = await list_tools()
         self.assertEqual(5, len(tools))
 
-    @unittest.skip("needs implementation")
-    async def test_postgres_selects(self):
-        db_name = "musiciandb"
-        result = await execute_sql_statement(
-            db_name, "SELECT 2 + 2 as result", read_only=True
-        )
-        self.assertEqual('[{"result": 4}]', result)
-
-        result = await execute_sql_statement(
-            db_name, "SELECT NOW() as result", read_only=True
-        )
-        self.assertTrue(result.startswith('[{"result": "'))
-
-        result = await execute_sql_statement(
-            db_name, "SELECT 1.23456789 as result", read_only=True
-        )
-        self.assertEqual('[{"result": 1.23456789}]', result)
-
-    @unittest.skip("needs implementation")
-    async def test_postgres_changes(self):
-        db_name = "musiciandb"
-        # insert 1 row
-        result = await execute_sql_statement(
-            db_name,
-            "insert into musician.band (founded, genre, name) values ('1962-01-01', 'Britpop', 'Beatles')",
-            read_only=False,
-        )
-        self.assertIsNotNone(result)
-        self.assertEqual(
-            '{"status": "INSERT 0 1", "message": "Statement executed successfully"}',
-            result,
-        )
-        # delete it again
-        result = await execute_sql_statement(
-            db_name, "delete from musician.band where name = 'Beatles'", read_only=False
-        )
-        self.assertEqual(
-            '{"status": "DELETE 1", "message": "Statement executed successfully"}',
-            result,
-        )
-
-    @unittest.skip("needs sql server docker running")
-    async def test_sqlserver_selects(self):
-        db_name = "portaldb"
-        result = await execute_sql_statement(
-            db_name, "SELECT 2 + 2 as result", read_only=True
-        )
-        self.assertEqual('[{"result": 4}]', result)
-
-        result = await execute_sql_statement(
-            db_name, "SELECT current_timestamp as result", read_only=True
-        )
-        self.assertTrue(result.startswith('[{"result": "'))
-
-        result = await execute_sql_statement(
-            db_name, "SELECT 1.23456789 as result", read_only=True
-        )
-        self.assertEqual('[{"result": 1.23456789}]', result)
-
-    @unittest.skip("needs sql server docker running")
-    async def test_sqlserver_changes(self):
-        db_name = "portaldb"
-        # insert 1 row
-        result = await execute_sql_statement(
-            db_name,
-            "insert into postbox.document_name (name, language, ui_display_value) values ('MCP_TEST', 'DE', 'Test')",
-            read_only=False,
-        )
-        self.assertIsNotNone(result)
-        self.assertEqual(
-            '{"affected_rows": 1, "message": "Statement executed successfully"}', result
-        )
-        # delete it again
-        result = await execute_sql_statement(
-            db_name,
-            "delete from postbox.document_name where name = 'MCP_TEST'",
-            read_only=False,
-        )
-        self.assertEqual(
-            '{"affected_rows": 1, "message": "Statement executed successfully"}', result
-        )
-
     @unittest.skip("Browser test disabled - requires manual interaction")
     async def test_open_in_browser(self):
         result = await open_in_browser("test_page.html")
@@ -150,7 +65,6 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(finding["content"])
             self.assertIn("python", finding["content"].lower())
 
-    # @unittest.skip("Source test disabled: Needs existing Maven Project")
     async def test_source_maven(self):
         config["buildTool"] = "mvn"
         # path to maven project required
@@ -160,7 +74,6 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         # original source starts with comment
         self.assertTrue(len(code) >= 200)
 
-    # @unittest.skip("Javadoc test disabled: Needs existing Maven Project")
     async def test_javadoc_maven(self):
         config["buildTool"] = "mvn"
         # path to maven project required

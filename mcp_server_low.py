@@ -21,10 +21,8 @@ from utils.helpers import (
     init_logging,
     get_maven_jar,
     decompile_from_jar,
-    has_item_in_section,
 )
 from utils.args import parse_arguments
-from utils.db import close_db_pool, db_connection_context
 from utils.mcp_helpers import get_project_folder, is_relative_path, to_text_context
 from utils.web import (
     CustomJSONEncoder,
@@ -42,8 +40,6 @@ logger = logging.getLogger(__name__)
 rootPath: Path = Path(__file__).parent
 configPath: str = f"{Path.home()}/.mcp-server/config.yml"
 config = {}
-
-db_access = False
 
 
 @asynccontextmanager
@@ -113,55 +109,6 @@ async def list_tools() -> list[types.Tool]:
             annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=True),
         ),
     ]
-    if db_access:
-        tools.append(
-            types.Tool(
-                name="readonly_sql_query",
-                description="Executes a read-only SQL query on a PostgreSQL or SqlServer database and returns the result as JSON.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "dbname": {
-                            "type": "string",
-                            "description": "The name of the database to connect.",
-                        },
-                        "query": {
-                            "type": "string",
-                            "description": "The SQL query to execute",
-                        },
-                    },
-                    "required": ["dbname", "query"],
-                },
-                annotations=types.ToolAnnotations(
-                    readOnlyHint=True, openWorldHint=False
-                ),
-            )
-        )
-        # add db change tool if "full" credentials are defined for any database
-        if has_item_in_section(config, "database", "full"):
-            tools.append(
-                types.Tool(
-                    name="modifying_sql_statement",
-                    description="Executes a SQL statement on a PostgreSQL or SqlServer database to modify data and returns the a status message as JSON. The statement is automatically committed.",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "dbname": {
-                                "type": "string",
-                                "description": "The name of the database to connect.",
-                            },
-                            "statement": {
-                                "type": "string",
-                                "description": "The SQL statement to execute",
-                            },
-                        },
-                        "required": ["dbname", "statement"],
-                    },
-                    annotations=types.ToolAnnotations(
-                        readOnlyHint=False, openWorldHint=False, idempotentHint=False
-                    ),
-                )
-            )
 
     if config.get("buildTool") is not None:
         logger.debug("Adding build related tools")
@@ -217,18 +164,6 @@ TOOL_REGISTRY = {
     "open_in_browser": {
         "handler": lambda args: open_in_browser(args["url"]),
         "required_params": ["url"],
-    },
-    "readonly_sql_query": {
-        "handler": lambda args: execute_sql_statement(
-            args["dbname"], args["query"], read_only=True
-        ),
-        "required_params": ["dbname", "query"],
-    },
-    "modifying_sql_statement": {
-        "handler": lambda args: execute_sql_statement(
-            args["dbname"], args["statement"], read_only=False
-        ),
-        "required_params": ["dbname", "statement"],
     },
     "http_get_request": {
         "handler": lambda args: http_get_request(args["url"], args.get("headers")),
@@ -292,115 +227,6 @@ async def handle_tool_call(
         response = json.dumps({"error": f"Error handling tool call '{name}': {str(e)}"})
 
     return to_text_context(response)
-
-
-async def execute_sql_statement(dbname: str, query: str, read_only: bool) -> str:
-    """Executes a SQL query on a database and returns the result as JSON.
-    Supports both PostgreSQL and SQL Server databases.
-    If flag read_only is true, a read_only connection is used
-    """
-    logger.info("Executing SQL query: %s", query)
-
-    # Retry logic to handle stale connections (especially for SQL Server)
-    max_retries = 2
-    for attempt in range(max_retries):
-        try:
-            async with db_connection_context(dbname, config, read_only) as conn:
-                logger.info("Database connection established.")
-
-                # Determine database vendor
-                vendor = config["database"][dbname].get("vendor", "postgresql").lower()
-
-                if vendor == "postgresql":
-                    # PostgreSQL execution
-                    if read_only:
-                        # execute select
-                        result = await conn.fetch(query)
-                        logger.info(
-                            "Query executed successfully on PostgreSQL. Fetched %d records.",
-                            len(result),
-                        )
-                        result_dict = [dict(record) for record in result]
-                    else:
-                        # execute insert/update/delete and get status with explicit transaction
-                        async with conn.transaction():
-                            result = await conn.execute(query)
-                        logger.info(
-                            "Statement executed successfully on PostgreSQL. Status: %s",
-                            result,
-                        )
-                        result_dict = {
-                            "status": result,
-                            "message": "Statement executed successfully",
-                        }
-
-                elif vendor == "sqlserver":
-                    cursor = await conn.cursor()
-                    await cursor.execute(query)
-
-                    if read_only:
-                        # collect result set
-                        columns = [column[0] for column in cursor.description]
-                        rows = await cursor.fetchall()
-                        result_dict = [dict(zip(columns, row)) for row in rows]
-                        logger.info(
-                            "Query executed successfully on SQL Server. Fetched %d records.",
-                            len(rows),
-                        )
-                    else:
-                        # get number of affected rows
-                        affected_rows = cursor.rowcount
-                        await conn.commit()  # Commit the transaction
-                        result_dict = {
-                            "affected_rows": affected_rows,
-                            "message": "Statement executed successfully",
-                        }
-                        logger.info(
-                            "Statement executed successfully on SQL Server. Affected %d rows.",
-                            affected_rows,
-                        )
-
-                    await cursor.close()
-
-                else:
-                    return json.dumps(
-                        {"error": f"Unsupported database vendor: {vendor}"}
-                    )
-
-                logger.debug("Result of query %s: %s", query, result_dict)
-                return json.dumps(result_dict, cls=CustomJSONEncoder)
-
-        except Exception as e:
-            # Check if this is a connection error that we should retry
-            error_msg = str(e).lower()
-            is_connection_error = any(
-                keyword in error_msg
-                for keyword in [
-                    "connection is broken",
-                    "connection reset",
-                    "connection closed",
-                    "connection timeout",
-                    "imc06",  # SQL Server specific error code for broken connection
-                    "communication link failure",
-                ]
-            )
-
-            if is_connection_error and attempt < max_retries - 1:
-                logger.warning(
-                    "Connection error on attempt %d/%d: %s. Retrying...",
-                    attempt + 1,
-                    max_retries,
-                    e,
-                )
-                # Close and recreate the pool to ensure fresh connections
-                await close_db_pool()
-                continue
-            else:
-                logger.error("Error executing SQL query: %s", e, exc_info=True)
-                return json.dumps({"error": str(e)})
-
-    # Should never reach here, but just in case
-    return json.dumps({"error": "Max retries exceeded"})
 
 
 async def http_get_request(url: str, headers: dict = None) -> str:
@@ -671,7 +497,6 @@ async def run():
 
 async def cleanup():
     """Cleanup resources when the server stops."""
-    await close_db_pool()
     await close_http_client()
     logger.info("Cleanup completed.")
 
@@ -688,9 +513,6 @@ if __name__ == "__main__":
     try:
         with open(configPath, "r", encoding="utf-8") as file:
             config = yaml.safe_load(file)
-        # Set DB Name of Database to connect to
-        if args.db_name is not None:
-            config["dbName"] = args.db_name
         # Set current workspace foldername
         if args.project_folder is not None:
             config["projectFolder"] = args.project_folder
