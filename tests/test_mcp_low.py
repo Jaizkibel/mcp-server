@@ -66,36 +66,34 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertIn("python", finding["content"].lower())
 
     async def test_source_maven(self):
+        if not config.get("mavenProjectPath"):
+            self.skipTest("Maven project path not configured")
         config["buildTool"] = "mvn"
-        # path to maven project required
-        self.assertIsNotNone(config.get("mavenProjectPath"))
         config["projectFolder"] = config.get("mavenProjectPath")
         code = await get_source("com.zaxxer.hikari.HikariDataSource")
         # original source starts with comment
         self.assertTrue(len(code) >= 200)
 
     async def test_javadoc_maven(self):
+        if not config.get("mavenProjectPath"):
+            self.skipTest("Maven project path not configured")
         config["buildTool"] = "mvn"
-        # path to maven project required
-        self.assertIsNotNone(config.get("mavenProjectPath"))
         config["projectFolder"] = config.get("mavenProjectPath")
         html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
-    # @unittest.skip("Javadoc test disabled: Needs existing Gradle Project")
     async def test_javadoc_gradle(self):
+        if not config.get("gradleProjectPath"):
+            self.skipTest("Gradle project path not configured")
         config["buildTool"] = "gradlew"
-        # path to gradle project required
-        self.assertIsNotNone(config.get("gradleProjectPath"))
         config["projectFolder"] = config.get("gradleProjectPath")
         html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
-    # @unittest.skip("Source test disabled: Needs existing Gradle Project")
     async def test_source_gradle(self):
+        if not config.get("gradleProjectPath"):
+            self.skipTest("Gradle project path not configured")
         config["buildTool"] = "gradlew"
-        # path to gradle project required
-        self.assertIsNotNone(config.get("gradleProjectPath"))
         config["projectFolder"] = config.get("gradleProjectPath")
         code = await get_source(
             "com.zaxxer.hikari.HikariDataSource"
