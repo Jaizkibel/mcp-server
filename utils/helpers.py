@@ -68,7 +68,7 @@ def get_maven_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
 
 
 def get_gradle_jar(build_tool: str, class_name: str, workspace_path: str) -> str:
-    command = [os.path.join(workspace_path, build_tool), "listAllJars"]
+    command = [build_tool, "listAllJars"]
     logger.info(f"Executing '{' '.join(command)}' in {workspace_path}")
     result = subprocess.run(
         command,
