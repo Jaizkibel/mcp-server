@@ -422,7 +422,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "markdownify", specifier = ">=1.1.0" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.25.0" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.26.0" },
     { name = "packaging", specifier = ">=26.0" },
     { name = "pathspec", specifier = ">=1.0.3" },
     { name = "pyyaml", specifier = ">=6.0.0" },
