@@ -83,9 +83,13 @@ async def list_tools() -> list[types.Tool]:
                     "url": {
                         "type": "string",
                         "description": "The URL or file path to open.",
+                    },
+                    "workspace": {
+                        "type": "string",
+                        "description": "The complete path to current project workspace",
                     }
                 },
-                "required": ["url"],
+                "required": ["url", "workspace"],
             },
             annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=True),
         ),
@@ -108,49 +112,58 @@ async def list_tools() -> list[types.Tool]:
             },
             annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=True),
         ),
+        types.Tool(
+            name="get_source",
+            description="Returns the source of a Java class. Does not work with classes from Java standard libraries. Only usable in Java projects with Maven or Gradle",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "class_name": {
+                        "type": "string",
+                        "description": "The full class name. Example: 'java.util.List'",
+                    },
+                    "workspace": {
+                        "type": "string",
+                        "description": "The complete path to current project workspace",
+                    },
+                    "build_tool": {
+                        "type": "string",
+                        "description": "The build tool used in this project. Must be one of 'mvn','mvnw','gradle','gradlew'",
+                    }
+                },
+                "required": ["class_name", "workspace", "build_tool"],
+            },
+            annotations=types.ToolAnnotations(
+                readOnlyHint=True, openWorldHint=False
+            ),
+        ),
+        types.Tool(
+            name="get_javadoc",
+            description="Gets Javadoc for a class. Does not work with classes from Java standard libraries.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "class_name": {
+                        "type": "string",
+                        "description": "The full class name. Example: 'java.util.List'",
+                    },
+                    "workspace": {
+                        "type": "string",
+                        "description": "The complete path to current project workspace",
+                    },
+                    "build_tool": {
+                        "type": "string",
+                        "description": "The build tool used in this project. Must be one of 'mvn','mvnw','gradle','gradlew'",
+                    }
+                },
+                "required": ["class_name", "workspace", "build_tool"],
+            },
+            annotations=types.ToolAnnotations(
+                readOnlyHint=True, openWorldHint=False
+            ),
+        )
+
     ]
-
-    if config.get("buildTool") is not None:
-        logger.debug("Adding build related tools")
-        tools.append(
-            types.Tool(
-                name="get_source",
-                description="Returns the source of a Java class. Does not work with classes from Java standard libraries.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "class_name": {
-                            "type": "string",
-                            "description": "The full class name. Example: 'java.util.List'",
-                        }
-                    },
-                    "required": ["class_name"],
-                },
-                annotations=types.ToolAnnotations(
-                    readOnlyHint=True, openWorldHint=False
-                ),
-            )
-        )
-        tools.append(
-            types.Tool(
-                name="get_javadoc",
-                description="Gets Javadoc for a class. Does not work with classes from Java standard libraries.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "class_name": {
-                            "type": "string",
-                            "description": "The full class name. Example: 'java.util.List'",
-                        }
-                    },
-                    "required": ["class_name"],
-                },
-                annotations=types.ToolAnnotations(
-                    readOnlyHint=True, openWorldHint=False
-                ),
-            )
-        )
-
     logger.debug("Collected %d tools", len(tools))
     return tools
 
@@ -162,20 +175,20 @@ TOOL_REGISTRY = {
         "required_params": ["query"],
     },
     "open_in_browser": {
-        "handler": lambda args: open_in_browser(args["url"]),
-        "required_params": ["url"],
+        "handler": lambda args: open_in_browser(args["url"], args["workspace"]),
+        "required_params": ["url", "workspace"],
     },
     "http_get_request": {
         "handler": lambda args: http_get_request(args["url"], args.get("headers")),
         "required_params": ["url"],
     },
     "get_source": {
-        "handler": lambda args: get_source(args["class_name"]),
-        "required_params": ["class_name"],
+        "handler": lambda args: get_source(args["class_name"], args["workspace"], args["build_tool"]),
+        "required_params": ["class_name", "workspace", "build_tool"],
     },
     "get_javadoc": {
-        "handler": lambda args: get_javadoc(args["class_name"]),
-        "required_params": ["class_name"],
+        "handler": lambda args: get_javadoc(args["class_name"], args["workspace"], args["build_tool"]),
+        "required_params": ["class_name", "workspace", "build_tool"],
     },
 }
 
@@ -370,14 +383,17 @@ async def web_search(query: str) -> str:
         return json.dumps({"error": f"Unexpected server error: {str(e)}"})
 
 
-async def open_in_browser(url: str) -> str:
+async def open_in_browser(url: str, workspace: str) -> str:
     """Opens a url or file in the local browser"""
     if not url.endswith(".html"):
         return "Error: can open HTML pages only"
-    workspace_path = await get_project_folder(server, config)
-    if not workspace_path:
-        logger.error("Workspace path is not set in the configuration.")
-        return "Error: Workspace path is not set in the configuration."
+    if workspace is None:
+        workspace_path = await get_project_folder(server, config)
+        if not workspace_path:
+            logger.error("Workspace path is not set in the configuration.")
+            return "Error: Workspace path is not set in the configuration."
+    else:
+        workspace_path = workspace
     browser_command = config.get("browserCommand")
     if not browser_command:
         logger.error("Browser command is not set in the configuration.")
@@ -403,17 +419,34 @@ async def open_in_browser(url: str) -> str:
         return f"Error: {str(e)}"
 
 
-async def get_source(class_name: str) -> str:
-    """Decompiles a Java class and returns the source code."""
-
-    build_tool: str = config.get("buildTool")
+async def _get_build_context(workspace: str, build_tool: str) -> tuple[str, str] | str:
+    """Helper to resolve workspace path and build tool command."""
+    if build_tool is None:
+        build_tool = config.get("buildTool")
     if build_tool is None:
         return "Error: Build tool not defined."
 
-    workspace_path = await get_project_folder(server, config)
+    if not build_tool.startswith("./"):
+        build_tool = "." + os.sep + build_tool
+
+    if workspace is None:
+        workspace_path = await get_project_folder(server, config)
+    else:
+        workspace_path = workspace
     if not workspace_path:
         logger.error("Workspace path is not set in the configuration.")
         return "Error: Workspace path is not set in the configuration."
+
+    return workspace_path, build_tool
+
+
+async def get_source(class_name: str, workspace: str, build_tool: str) -> str:
+    """Decompiles a Java class and returns the source code."""
+
+    context = await _get_build_context(workspace, build_tool)
+    if isinstance(context, str):
+        return context
+    workspace_path, build_tool = context
 
     # search for lib jar containing the class
     if "mvn" in build_tool:
@@ -442,21 +475,17 @@ async def get_source(class_name: str) -> str:
     return decompile_from_jar(class_name, jar_path, rootPath, workspace_path)
 
 
-async def get_javadoc(class_name: str) -> str:
+async def get_javadoc(class_name: str, workspace: str, build_tool: str) -> str:
     """Gets Javadoc for class.
 
     Works with downloaded Javadoc jars only.
     Use 'mvn dependency:resolve -Dclassifier=javadoc' to download them.
     """
 
-    build_tool: str = config.get("buildTool")
-    if build_tool is None:
-        return "Error: Build tool not defined."
-
-    workspace_path = await get_project_folder(server, config)
-    if not workspace_path:
-        logger.error("Workspace path is not set in the configuration.")
-        return "Error: Workspace path is not set in the configuration."
+    context = await _get_build_context(workspace, build_tool)
+    if isinstance(context, str):
+        return context
+    workspace_path, build_tool = context
 
     if "mvn" in build_tool:
         jar_path = get_maven_jar(build_tool, class_name, workspace_path)
