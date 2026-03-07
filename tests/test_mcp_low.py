@@ -66,11 +66,12 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertIn("python", finding["content"].lower())
 
     async def test_source_maven(self):
-        if not config.get("mavenProjectPath"):
+        project_path = config.get("mavenProjectPath")
+        if not project_path:
             self.skipTest("Maven project path not configured")
         config["buildTool"] = "mvn"
-        config["projectFolder"] = config.get("mavenProjectPath")
-        code = await get_source("com.zaxxer.hikari.HikariDataSource")
+        config["projectFolder"] = project_path
+        code = await get_source("com.zaxxer.hikari.HikariDataSource", None, None)
         # original source starts with comment
         self.assertTrue(len(code) >= 200)
 
@@ -87,7 +88,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.skipTest("Gradle project path not configured")
         config["buildTool"] = "gradlew"
         config["projectFolder"] = config.get("gradleProjectPath")
-        html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
+        html = await get_javadoc("com.zaxxer.hikari.HikariDataSource", None, None)
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
     async def test_source_gradle(self):
@@ -96,7 +97,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
         config["buildTool"] = "gradlew"
         config["projectFolder"] = config.get("gradleProjectPath")
         code = await get_source(
-            "com.zaxxer.hikari.HikariDataSource"
+            "com.zaxxer.hikari.HikariDataSource", None, None
         )
         # original source starts with comment
         self.assertTrue(code.startswith("/*\n"))
