@@ -426,7 +426,8 @@ async def _get_build_context(workspace: str, build_tool: str) -> tuple[str, str]
     if build_tool is None:
         return "Error: Build tool not defined."
 
-    if not build_tool.startswith("./"):
+    # wrappers are located in workspace
+    if build_tool.endswith("w"):
         build_tool = "." + os.sep + build_tool
 
     if workspace is None:

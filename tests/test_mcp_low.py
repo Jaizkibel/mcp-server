@@ -80,7 +80,7 @@ class TestMcpServerFunctions(unittest.IsolatedAsyncioTestCase):
             self.skipTest("Maven project path not configured")
         config["buildTool"] = "mvn"
         config["projectFolder"] = config.get("mavenProjectPath")
-        html = await get_javadoc("com.zaxxer.hikari.HikariDataSource")
+        html = await get_javadoc("com.zaxxer.hikari.HikariDataSource", None, None)
         self.assertTrue(html.startswith("<!DOCTYPE HTML>"))
 
     async def test_javadoc_gradle(self):
