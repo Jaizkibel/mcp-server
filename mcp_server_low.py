@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import asyncio
-from typing import AsyncIterator
+from typing import AsyncIterator, Callable, Any, TypedDict
 
 import mcp.server.stdio
 import mcp.types as types
@@ -168,8 +168,14 @@ async def list_tools() -> list[types.Tool]:
     return tools
 
 
+# Tool configuration definition for typing
+class ToolConfig(TypedDict):
+    handler: Callable[[dict[str, Any]], Any]
+    required_params: list[str]
+
+
 # Tool registry with configuration for each tool
-TOOL_REGISTRY = {
+TOOL_REGISTRY: dict[str, ToolConfig] = {
     "web_search": {
         "handler": lambda args: web_search(args["query"]),
         "required_params": ["query"],
@@ -405,15 +411,18 @@ async def open_in_browser(url: str, workspace: str) -> str:
     try:
         # Execute command to open browser
         # Popen returns immediately after executing command
-        subprocess.Popen(
-            [browser_command, url],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-            close_fds=True,
-        )
-        return "Browser successfully opened"
+        if browser_command:
+            subprocess.Popen(
+                [str(browser_command), url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+                close_fds=True,
+            )
+            return "Browser successfully opened"
+        else:
+            return "Error: Browser command is missing"
     except Exception as e:
         logger.error("Error opening url in browser: %s", e, exc_info=True)
         return f"Error: {str(e)}"
@@ -422,7 +431,7 @@ async def open_in_browser(url: str, workspace: str) -> str:
 async def _get_build_context(workspace: str, build_tool: str) -> tuple[str, str] | str:
     """Helper to resolve workspace path and build tool command."""
     if build_tool is None:
-        build_tool = config.get("buildTool")
+        build_tool = config.get("buildTool", "")
     if build_tool is None:
         return "Error: Build tool not defined."
 
